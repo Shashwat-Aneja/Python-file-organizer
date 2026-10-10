@@ -44,7 +44,6 @@ def categorize(path: Path):
     return EXT_TO_CAT.get(ext, "Others")
 
 def safe_move(src: Path, dest_dir: Path, dry_run=False):
-    dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / src.name
     if dest.exists():
         # find next available name
@@ -60,6 +59,7 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False):
     if dry_run:
         print(f"[dry-run] Move: {src} -> {dest}")
     else:
+        dest_dir.mkdir(parents=True, exist_ok=True)
         print(f"Move: {src} -> {dest}")
         shutil.move(str(src), str(dest))
 
