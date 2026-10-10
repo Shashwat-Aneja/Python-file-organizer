@@ -67,3 +67,15 @@ def test_cli_rejects_a_missing_target_directory(tmp_path, monkeypatch, capsys):
     assert exc_info.value.code == 2
     assert "target directory does not exist" in capsys.readouterr().err
 
+def test_version_flag_prints_version_and_exits(monkeypatch, capsys):
+    import pytest
+    from organize_files import main
+
+    monkeypatch.setattr("sys.argv", ["organize_files.py", "--version"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.strip() == "Python File Organizer 1.0.0"
+
