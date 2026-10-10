@@ -77,6 +77,7 @@ def scan_and_group(target: Path, include_hidden: bool = False):
 
 def main():
     parser = argparse.ArgumentParser(description="Organize files in a directory by type")
+    parser.add_argument("--version", action="version", version="Python File Organizer 1.0.0")
     parser.add_argument("target", nargs="?", default=".", help="Target directory (default: current directory)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without moving files")
     parser.add_argument("--include-hidden", action="store_true", help="Include hidden files (starting with .)")
