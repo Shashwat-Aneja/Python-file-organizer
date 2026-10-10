@@ -63,11 +63,11 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False):
         print(f"Move: {src} -> {dest}")
         shutil.move(str(src), str(dest))
 
-def scan_and_group(target: Path):
+def scan_and_group(target: Path, include_hidden: bool = False):
     groups = defaultdict(list)
     for p in target.iterdir():
-        if p.name.startswith("."):
-            # skip hidden files and VCS folders
+        if p.name.startswith(".") and not include_hidden:
+            # Hidden files are opt-in so VCS metadata stays protected by default.
             continue
         if p.is_dir():
             continue
@@ -87,7 +87,7 @@ def main():
         print(f"Error: target directory does not exist or is not a directory: {target}", file=sys.stderr)
         sys.exit(2)
 
-    groups = scan_and_group(target)
+    groups = scan_and_group(target, include_hidden=args.include_hidden)
     if not groups:
         print("No files to organize.")
         return
