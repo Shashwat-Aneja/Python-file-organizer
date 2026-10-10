@@ -51,3 +51,19 @@ def test_safe_move_uses_a_suffix_when_name_collides(tmp_path):
 
 def test_categorize_is_case_insensitive(tmp_path):
     assert categorize(tmp_path / "PHOTO.PNG") == "Images"
+
+
+def test_cli_rejects_a_missing_target_directory(tmp_path, monkeypatch, capsys):
+    from organize_files import main
+
+    missing = tmp_path / "does-not-exist"
+    monkeypatch.setattr("sys.argv", ["organize_files.py", str(missing)])
+
+    import pytest
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 2
+    assert "target directory does not exist" in capsys.readouterr().err
+
