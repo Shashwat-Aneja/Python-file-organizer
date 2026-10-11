@@ -79,3 +79,19 @@ def test_version_flag_prints_version_and_exits(monkeypatch, capsys):
     assert exc_info.value.code == 0
     assert capsys.readouterr().out.strip() == "Python File Organizer 1.0.0"
 
+
+
+def test_symbolic_links_are_excluded_from_scans(tmp_path):
+    target = tmp_path / "actual.txt"
+    target.write_text("content", encoding="utf-8")
+    link = tmp_path / "linked.txt"
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        import pytest
+        pytest.skip("Symbolic links are not supported on this platform")
+
+    groups = scan_and_group(tmp_path)
+
+    assert target in groups["Documents"]
+    assert all(link not in files for files in groups.values())
