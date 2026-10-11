@@ -29,3 +29,7 @@ python organize_files.py --version
 ### Validate a target path
 
 The organizer exits with status code `2` if the target path is missing or is not a directory. Use `--dry-run` first when checking a directory you have not organized before.
+
+### Symbolic-link safety
+
+The scanner skips symbolic links instead of moving them. This prevents a linked file from being moved unexpectedly when its target lives outside the selected directory.
