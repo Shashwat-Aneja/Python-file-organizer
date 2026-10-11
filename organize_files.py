@@ -66,6 +66,9 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False):
 def scan_and_group(target: Path, include_hidden: bool = False):
     groups = defaultdict(list)
     for p in target.iterdir():
+        if p.is_symlink():
+            # Avoid moving a link whose target may be outside the selected directory.
+            continue
         if p.name.startswith(".") and not include_hidden:
             # Hidden files are opt-in so VCS metadata stays protected by default.
             continue
