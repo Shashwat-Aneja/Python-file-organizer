@@ -23,12 +23,12 @@ from collections import defaultdict
 
 CATEGORIES = {
     "Images": {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".tiff"},
-    "Documents": {".pdf", ".doc", ".docx", ".txt", ".odt", ".xls", ".xlsx", ".ppt", ".pptx"},
+    "Documents": {".doc", ".docx", ".txt", ".odt", ".xls", ".xlsx", ".ppt", ".pptx"},
     "Audio": {".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"},
     "Video": {".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv"},
     "Archives": {".zip", ".tar", ".gz", ".rar", ".7z"},
     "Scripts": {".py", ".sh", ".js", ".php", ".rb", ".pl"},
-    "PDFs": {".pdf"}  # optional extra category if you want PDFs separate
+    "PDFs": {".pdf"},
 }
 
 # Reverse lookup for quick extension -> category
@@ -37,11 +37,13 @@ for cat, exts in CATEGORIES.items():
     for e in exts:
         EXT_TO_CAT[e] = cat
 
+
 def categorize(path: Path):
     if path.is_dir():
         return None
     ext = path.suffix.lower()
     return EXT_TO_CAT.get(ext, "Others")
+
 
 def safe_move(src: Path, dest_dir: Path, dry_run=False):
     dest = dest_dir / src.name
@@ -63,6 +65,7 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False):
         print(f"Move: {src} -> {dest}")
         shutil.move(str(src), str(dest))
 
+
 def scan_and_group(target: Path, include_hidden: bool = False):
     groups = defaultdict(list)
     for p in target.iterdir():
@@ -77,6 +80,7 @@ def scan_and_group(target: Path, include_hidden: bool = False):
         cat = categorize(p)
         groups[cat].append(p)
     return groups
+
 
 def main():
     parser = argparse.ArgumentParser(description="Organize files in a directory by type")
@@ -106,6 +110,7 @@ def main():
             safe_move(f, folder, dry_run=args.dry_run)
 
     print("\nDone.")
+
 
 if __name__ == "__main__":
     main()
