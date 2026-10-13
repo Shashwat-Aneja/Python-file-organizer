@@ -29,6 +29,8 @@ CATEGORIES = {
     "Archives": {".zip", ".tar", ".gz", ".rar", ".7z"},
     "Scripts": {".py", ".sh", ".js", ".php", ".rb", ".pl"},
     "PDFs": {".pdf"},
+    "Data": {".csv", ".json", ".xml", ".yaml", ".yml", ".parquet"},
+    "Documents": {".md"},
 }
 
 # Reverse lookup for quick extension -> category
