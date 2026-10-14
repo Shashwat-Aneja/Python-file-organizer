@@ -93,3 +93,10 @@ def test_safe_move_avoids_multiple_existing_suffixes(tmp_path):
     source.write_text("new report", encoding="utf-8")
     safe_move(source, destination)
     assert (destination / "report(2).pdf").read_text(encoding="utf-8") == "new report"
+
+def test_markdown_files_are_categorized_as_documents(tmp_path):
+    assert categorize(tmp_path / "README.md") == "Documents"
+
+
+def test_word_documents_remain_categorized_as_documents(tmp_path):
+    assert categorize(tmp_path / "report.docx") == "Documents"
