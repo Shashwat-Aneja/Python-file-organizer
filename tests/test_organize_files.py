@@ -100,3 +100,7 @@ def test_markdown_files_are_categorized_as_documents(tmp_path):
 
 def test_word_documents_remain_categorized_as_documents(tmp_path):
     assert categorize(tmp_path / "report.docx") == "Documents"
+
+def test_markdown_and_restructuredtext_are_categorized_as_documents(tmp_path):
+    assert categorize(tmp_path / "README.md") == "Documents"
+    assert categorize(tmp_path / "manual.rst") == "Documents"
