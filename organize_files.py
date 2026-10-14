@@ -23,7 +23,7 @@ from collections import defaultdict
 
 CATEGORIES = {
     "Images": {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".tiff"},
-    "Documents": {".doc", ".docx", ".txt", ".odt", ".xls", ".xlsx", ".ppt", ".pptx"},
+    "Documents": {".doc", ".docx", ".txt", ".md", ".rst", ".odt", ".xls", ".xlsx", ".ppt", ".pptx"},
     "Audio": {".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"},
     "Video": {".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv"},
     "Archives": {".zip", ".tar", ".gz", ".rar", ".7z"},
