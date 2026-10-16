@@ -104,3 +104,16 @@ def test_word_documents_remain_categorized_as_documents(tmp_path):
 def test_markdown_and_restructuredtext_are_categorized_as_documents(tmp_path):
     assert categorize(tmp_path / "README.md") == "Documents"
     assert categorize(tmp_path / "manual.rst") == "Documents"
+
+def test_scan_skips_symbolic_links(tmp_path):
+    target = tmp_path / "outside.txt"
+    target.write_text("keep in place", encoding="utf-8")
+    link = tmp_path / "linked.txt"
+    link.symlink_to(target)
+
+    groups = scan_and_group(tmp_path)
+
+    assert all(link not in files for files in groups.values())
+    assert target.exists()
+    assert link.is_symlink()
+
