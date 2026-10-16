@@ -117,3 +117,17 @@ def test_scan_skips_symbolic_links(tmp_path):
     assert target.exists()
     assert link.is_symlink()
 
+def test_dry_run_reports_next_available_collision_name(tmp_path, capsys):
+    source = tmp_path / "report.pdf"
+    destination = tmp_path / "PDFs"
+    destination.mkdir()
+    (destination / "report.pdf").write_text("existing", encoding="utf-8")
+    (destination / "report(1).pdf").write_text("also existing", encoding="utf-8")
+    source.write_text("new", encoding="utf-8")
+
+    safe_move(source, destination, dry_run=True)
+
+    output = capsys.readouterr().out
+    assert "report(2).pdf" in output
+    assert source.exists()
+    assert (destination / "report.pdf").read_text(encoding="utf-8") == "existing"
