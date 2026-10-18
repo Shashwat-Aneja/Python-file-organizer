@@ -131,3 +131,8 @@ def test_dry_run_reports_next_available_collision_name(tmp_path, capsys):
     assert "report(2).pdf" in output
     assert source.exists()
     assert (destination / "report.pdf").read_text(encoding="utf-8") == "existing"
+
+
+def test_heic_and_heif_images_are_categorized_case_insensitively(tmp_path):
+    assert categorize(tmp_path / "phone-photo.HEIC") == "Images"
+    assert categorize(tmp_path / "archive.heif") == "Images"
