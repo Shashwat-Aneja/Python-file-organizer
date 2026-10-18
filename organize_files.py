@@ -22,7 +22,7 @@ from pathlib import Path
 from collections import defaultdict
 
 CATEGORIES = {
-    "Images": {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".tiff"},
+    "Images": {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".tiff", ".heic", ".heif"},
     "Documents": {".doc", ".docx", ".txt", ".md", ".rst", ".odt", ".xls", ".xlsx", ".ppt", ".pptx"},
     "Audio": {".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"},
     "Video": {".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv"},
