@@ -1,6 +1,6 @@
 # Python File Organizer
 
-A lightweight Python tool that organizes files into Images, Documents, PDFs, Data, Audio, Video, Archives, Scripts, and Others folders.  
+A lightweight Python tool that organizes files into Images, Documents, PDFs, Data, Audio, Video, Archives, Scripts, and Others folders. Image support includes HEIC and HEIF photos.  
 Supports a **dry-run mode**, collision-safe moving, and clean console logs.
 
 ---
