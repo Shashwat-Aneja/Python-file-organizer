@@ -64,3 +64,8 @@ python -m pytest -q
 
 - `organize_files.py`: command-line organizer and file-category mapping.
 - `tests/test_organize_files.py`: tests for hidden files, dry-run behavior, collisions, categorization, invalid paths, and symbolic links.
+
+
+## Notebook support
+
+Jupyter Notebook files (`.ipynb`) are placed in a dedicated `Notebooks` folder. The extension is matched case-insensitively, so `.IPYNB` files are handled the same way.
