@@ -28,6 +28,7 @@ CATEGORIES = {
     "Video": {".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv"},
     "Archives": {".zip", ".tar", ".gz", ".rar", ".7z"},
     "Scripts": {".py", ".sh", ".js", ".php", ".rb", ".pl"},
+    "Notebooks": {".ipynb"},
     "PDFs": {".pdf"},
     "Data": {".csv", ".json", ".xml", ".yaml", ".yml", ".parquet"},
 }
