@@ -68,7 +68,17 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False):
         shutil.move(str(src), str(dest))
 
 
-def scan_and_group(target: Path, include_hidden: bool = False):
+def scan_and_group(
+    target: Path,
+    include_hidden: bool = False,
+    exclude_extensions=None,
+):
+    """Group top-level files, optionally skipping selected filename extensions."""
+    excluded = {
+        ("." + extension.strip().lstrip(".")).lower()
+        for extension in (exclude_extensions or [])
+        if isinstance(extension, str) and extension.strip()
+    }
     groups = defaultdict(list)
     for p in target.iterdir():
         if p.is_symlink():
@@ -78,6 +88,8 @@ def scan_and_group(target: Path, include_hidden: bool = False):
             # Hidden files are opt-in so VCS metadata stays protected by default.
             continue
         if p.is_dir():
+            continue
+        if p.suffix.lower() in excluded:
             continue
         cat = categorize(p)
         groups[cat].append(p)
@@ -90,6 +102,13 @@ def main():
     parser.add_argument("target", nargs="?", default=".", help="Target directory (default: current directory)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without moving files")
     parser.add_argument("--include-hidden", action="store_true", help="Include hidden files (starting with .)")
+    parser.add_argument(
+        "--exclude-ext",
+        action="append",
+        default=[],
+        metavar="EXT",
+        help="Skip files with this extension (repeatable, e.g. --exclude-ext .tmp)",
+    )
     args = parser.parse_args()
 
     target = Path(args.target).resolve()
@@ -97,7 +116,11 @@ def main():
         print(f"Error: target directory does not exist or is not a directory: {target}", file=sys.stderr)
         sys.exit(2)
 
-    groups = scan_and_group(target, include_hidden=args.include_hidden)
+    groups = scan_and_group(
+        target,
+        include_hidden=args.include_hidden,
+        exclude_extensions=args.exclude_ext,
+    )
     if not groups:
         print("No files to organize.")
         return
