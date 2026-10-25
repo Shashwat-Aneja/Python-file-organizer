@@ -136,3 +136,37 @@ def test_dry_run_reports_next_available_collision_name(tmp_path, capsys):
 def test_heic_and_heif_images_are_categorized_case_insensitively(tmp_path):
     assert categorize(tmp_path / "phone-photo.HEIC") == "Images"
     assert categorize(tmp_path / "archive.heif") == "Images"
+
+
+def test_excluded_extensions_are_case_insensitive_and_accept_optional_dot(tmp_path):
+    keep = tmp_path / "notes.txt"
+    excluded_lower = tmp_path / "debug.log"
+    excluded_upper = tmp_path / "trace.LOG"
+    keep.write_text("keep", encoding="utf-8")
+    excluded_lower.write_text("skip", encoding="utf-8")
+    excluded_upper.write_text("skip", encoding="utf-8")
+
+    groups = scan_and_group(tmp_path, exclude_extensions=[".LOG"])
+
+    assert groups["Documents"] == [keep]
+    assert all(excluded_lower not in files for files in groups.values())
+    assert all(excluded_upper not in files for files in groups.values())
+
+
+def test_cli_accepts_repeated_excluded_extensions(tmp_path, monkeypatch, capsys):
+    from organize_files import main
+
+    (tmp_path / "keep.txt").write_text("keep", encoding="utf-8")
+    (tmp_path / "cache.tmp").write_text("skip", encoding="utf-8")
+    (tmp_path / "trace.log").write_text("skip", encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["organize_files.py", str(tmp_path), "--dry-run", "--exclude-ext", "tmp", "--exclude-ext", ".log"],
+    )
+
+    main()
+
+    output = capsys.readouterr().out
+    assert "keep.txt" in output
+    assert "cache.tmp" not in output
+    assert "trace.log" not in output
