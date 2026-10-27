@@ -6,16 +6,17 @@ A lightweight, safe file organizer for a target directory.
 
 Usage:
     python organize_files.py /path/to/target --dry-run
-    python organize_files.py .    # organizes current directory
+    python organize_files.py . --report-json ./organization-report.json
 
 Features:
-- Moves files into folders by category (Images, Documents, Audio, Video, Archives, Scripts, Others)
+- Moves files into folders by category
 - Dry-run mode to preview actions without making changes
 - Collision safe: appends numeric suffix if filename exists
-- Logs actions to console
+- Optional JSON action report for automation and auditing
 """
 
 import argparse
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -50,7 +51,6 @@ def categorize(path: Path):
 def safe_move(src: Path, dest_dir: Path, dry_run=False):
     dest = dest_dir / src.name
     if dest.exists():
-        # find next available name
         base = src.stem
         ext = src.suffix
         i = 1
@@ -62,10 +62,13 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False):
             i += 1
     if dry_run:
         print(f"[dry-run] Move: {src} -> {dest}")
+        status = "planned"
     else:
         dest_dir.mkdir(parents=True, exist_ok=True)
         print(f"Move: {src} -> {dest}")
         shutil.move(str(src), str(dest))
+        status = "moved"
+    return {"source": str(src), "destination": str(dest), "status": status}
 
 
 def scan_and_group(
@@ -96,7 +99,23 @@ def scan_and_group(
     return groups
 
 
-def main():
+def write_report(report_path: Path, target: Path, dry_run: bool, actions: list):
+    """Persist machine-readable actions without including the report file itself."""
+    counts = {
+        "planned": sum(action["status"] == "planned" for action in actions),
+        "moved": sum(action["status"] == "moved" for action in actions),
+    }
+    report = {
+        "target": str(target),
+        "dry_run": dry_run,
+        "summary": {"total": len(actions), **counts},
+        "actions": actions,
+    }
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Organize files in a directory by type")
     parser.add_argument("--version", action="version", version="Python File Organizer 1.0.0")
     parser.add_argument("target", nargs="?", default=".", help="Target directory (default: current directory)")
@@ -109,33 +128,62 @@ def main():
         metavar="EXT",
         help="Skip files with this extension (repeatable, e.g. --exclude-ext .tmp)",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--report-json",
+        metavar="PATH",
+        help="Write a JSON summary of planned or completed moves to PATH",
+    )
+    args = parser.parse_args(argv)
 
     target = Path(args.target).resolve()
     if not target.exists() or not target.is_dir():
         print(f"Error: target directory does not exist or is not a directory: {target}", file=sys.stderr)
-        sys.exit(2)
+        return 2
 
+    report_path = Path(args.report_json).expanduser().resolve() if args.report_json else None
     groups = scan_and_group(
         target,
         include_hidden=args.include_hidden,
         exclude_extensions=args.exclude_ext,
     )
+
+    # An existing report inside the target must never be moved as an input file.
+    if report_path is not None:
+        for category in list(groups):
+            groups[category] = [path for path in groups[category] if path.resolve() != report_path]
+            if not groups[category]:
+                del groups[category]
+
     if not groups:
         print("No files to organize.")
-        return
+        if report_path is not None:
+            try:
+                write_report(report_path, target, args.dry_run, [])
+            except OSError as exc:
+                print(f"Error: could not write JSON report: {exc}", file=sys.stderr)
+                return 1
+        return 0
 
     print(f"Organizing files in: {target}")
-    for cat, files in sorted(groups.items()):
-        print(f"\nCategory: {cat} ({len(files)} files)")
-        folder = target / cat
-        for f in files:
-            if not args.include_hidden and f.name.startswith("."):
+    actions = []
+    for category, files in sorted(groups.items()):
+        print(f"\nCategory: {category} ({len(files)} files)")
+        folder = target / category
+        for file_path in files:
+            if not args.include_hidden and file_path.name.startswith("."):
                 continue
-            safe_move(f, folder, dry_run=args.dry_run)
+            actions.append(safe_move(file_path, folder, dry_run=args.dry_run))
+
+    if report_path is not None:
+        try:
+            write_report(report_path, target, args.dry_run, actions)
+        except OSError as exc:
+            print(f"Error: could not write JSON report: {exc}", file=sys.stderr)
+            return 1
 
     print("\nDone.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
