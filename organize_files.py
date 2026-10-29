@@ -50,13 +50,15 @@ def categorize(path: Path):
 
 def safe_move(src: Path, dest_dir: Path, dry_run=False):
     dest = dest_dir / src.name
-    if dest.exists():
+    # Treat dangling symlinks as occupied paths too. Path.exists() alone
+    # follows symlinks and returns False when the link target is missing.
+    if dest.exists() or dest.is_symlink():
         base = src.stem
         ext = src.suffix
         i = 1
         while True:
             candidate = dest_dir / f"{base}({i}){ext}"
-            if not candidate.exists():
+            if not candidate.exists() and not candidate.is_symlink():
                 dest = candidate
                 break
             i += 1
