@@ -41,6 +41,25 @@ def test_safe_move_uses_a_suffix_when_name_collides(tmp_path):
     assert (destination / "report.pdf").read_text(encoding="utf-8") == "existing"
 
 
+def test_safe_move_treats_dangling_symlinks_as_collisions(tmp_path):
+    import pytest
+
+    source = tmp_path / "report.pdf"
+    destination = tmp_path / "PDFs"
+    destination.mkdir()
+    source.write_text("new report", encoding="utf-8")
+    dangling_link = destination / "report.pdf"
+    try:
+        dangling_link.symlink_to(tmp_path / "missing-target")
+    except (OSError, NotImplementedError):
+        pytest.skip("Symbolic links are not supported on this platform")
+
+    safe_move(source, destination)
+
+    assert dangling_link.is_symlink()
+    assert (destination / "report(1).pdf").read_text(encoding="utf-8") == "new report"
+
+
 def test_categorize_is_case_insensitive(tmp_path):
     assert categorize(tmp_path / "PHOTO.PNG") == "Images"
 
