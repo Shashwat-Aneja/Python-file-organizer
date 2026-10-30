@@ -13,6 +13,7 @@ Features:
 - Dry-run mode to preview actions without making changes
 - Collision safe: appends numeric suffix if filename exists
 - Optional JSON action report for automation and auditing
+- Optional recursive discovery of files in nested directories
 """
 
 import argparse
@@ -77,27 +78,35 @@ def scan_and_group(
     target: Path,
     include_hidden: bool = False,
     exclude_extensions=None,
+    recursive: bool = False,
 ):
-    """Group top-level files, optionally skipping selected filename extensions."""
+    """Group files by category, optionally discovering files below the target."""
     excluded = {
         ("." + extension.strip().lstrip(".")).lower()
         for extension in (exclude_extensions or [])
         if isinstance(extension, str) and extension.strip()
     }
     groups = defaultdict(list)
-    for p in target.iterdir():
-        if p.is_symlink():
+    paths = target.rglob("*") if recursive else target.iterdir()
+    generated_categories = set(CATEGORIES) | {"Others"}
+
+    for path in paths:
+        relative = path.relative_to(target)
+        if path.is_symlink():
             # Avoid moving a link whose target may be outside the selected directory.
             continue
-        if p.name.startswith(".") and not include_hidden:
-            # Hidden files are opt-in so VCS metadata stays protected by default.
+        if recursive and relative.parts[0] in generated_categories:
+            # Do not reprocess files already placed in organizer output folders.
             continue
-        if p.is_dir():
+        if not include_hidden and any(part.startswith(".") for part in relative.parts):
+            # Hidden files and hidden directory trees are opt-in.
             continue
-        if p.suffix.lower() in excluded:
+        if path.is_dir():
             continue
-        cat = categorize(p)
-        groups[cat].append(p)
+        if path.suffix.lower() in excluded:
+            continue
+        category = categorize(path)
+        groups[category].append(path)
     return groups
 
 
@@ -124,6 +133,11 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without moving files")
     parser.add_argument("--include-hidden", action="store_true", help="Include hidden files (starting with .)")
     parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Discover files in nested directories and move them into the top-level category folders",
+    )
+    parser.add_argument(
         "--exclude-ext",
         action="append",
         default=[],
@@ -147,6 +161,7 @@ def main(argv=None):
         target,
         include_hidden=args.include_hidden,
         exclude_extensions=args.exclude_ext,
+        recursive=args.recursive,
     )
 
     # An existing report inside the target must never be moved as an input file.
@@ -172,8 +187,6 @@ def main(argv=None):
         print(f"\nCategory: {category} ({len(files)} files)")
         folder = target / category
         for file_path in files:
-            if not args.include_hidden and file_path.name.startswith("."):
-                continue
             actions.append(safe_move(file_path, folder, dry_run=args.dry_run))
 
     if report_path is not None:
