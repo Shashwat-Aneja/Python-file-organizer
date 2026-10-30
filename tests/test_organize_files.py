@@ -151,11 +151,9 @@ def test_dry_run_reports_next_available_collision_name(tmp_path, capsys):
     assert source.exists()
     assert (destination / "report.pdf").read_text(encoding="utf-8") == "existing"
 
-
 def test_heic_and_heif_images_are_categorized_case_insensitively(tmp_path):
     assert categorize(tmp_path / "phone-photo.HEIC") == "Images"
     assert categorize(tmp_path / "archive.heif") == "Images"
-
 
 def test_excluded_extensions_are_case_insensitive_and_accept_optional_dot(tmp_path):
     keep = tmp_path / "notes.txt"
@@ -170,7 +168,6 @@ def test_excluded_extensions_are_case_insensitive_and_accept_optional_dot(tmp_pa
     assert groups["Documents"] == [keep]
     assert all(excluded_lower not in files for files in groups.values())
     assert all(excluded_upper not in files for files in groups.values())
-
 
 def test_cli_accepts_repeated_excluded_extensions(tmp_path, monkeypatch, capsys):
     from organize_files import main
@@ -189,3 +186,35 @@ def test_cli_accepts_repeated_excluded_extensions(tmp_path, monkeypatch, capsys)
     assert "keep.txt" in output
     assert "cache.tmp" not in output
     assert "trace.log" not in output
+
+
+def test_recursive_scan_finds_nested_files_and_skips_category_outputs(tmp_path):
+    from organize_files import scan_and_group
+
+    nested_file = tmp_path / "project" / "notes.txt"
+    existing_output = tmp_path / "Documents" / "already-organized.txt"
+    nested_file.parent.mkdir()
+    existing_output.parent.mkdir()
+    nested_file.write_text("new", encoding="utf-8")
+    existing_output.write_text("existing", encoding="utf-8")
+
+    groups = scan_and_group(tmp_path, recursive=True)
+
+    assert groups["Documents"] == [nested_file]
+    assert all(existing_output not in files for files in groups.values())
+
+
+def test_recursive_scan_skips_hidden_directory_trees_by_default(tmp_path):
+    from organize_files import scan_and_group
+
+    visible = tmp_path / "project" / "visible.txt"
+    hidden = tmp_path / ".private" / "secret.txt"
+    visible.parent.mkdir()
+    hidden.parent.mkdir()
+    visible.write_text("visible", encoding="utf-8")
+    hidden.write_text("hidden", encoding="utf-8")
+
+    groups = scan_and_group(tmp_path, recursive=True)
+
+    assert groups["Documents"] == [visible]
+    assert all(hidden not in files for files in groups.values())
