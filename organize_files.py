@@ -79,6 +79,8 @@ def scan_and_group(
     include_hidden: bool = False,
     exclude_extensions=None,
     recursive: bool = False,
+    min_size_bytes=None,
+    max_size_bytes=None,
 ):
     """Group files by category, optionally discovering files below the target."""
     excluded = {
@@ -86,6 +88,15 @@ def scan_and_group(
         for extension in (exclude_extensions or [])
         if isinstance(extension, str) and extension.strip()
     }
+    for name, value in (("min_size_bytes", min_size_bytes), ("max_size_bytes", max_size_bytes)):
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+        ):
+            raise ValueError(f"{name} must be a non-negative integer.")
+
+    if min_size_bytes is not None and max_size_bytes is not None and min_size_bytes > max_size_bytes:
+        raise ValueError("min_size_bytes cannot exceed max_size_bytes.")
+
     groups = defaultdict(list)
     paths = target.rglob("*") if recursive else target.iterdir()
     generated_categories = set(CATEGORIES) | {"Others"}
@@ -104,6 +115,11 @@ def scan_and_group(
         if path.is_dir():
             continue
         if path.suffix.lower() in excluded:
+            continue
+        size_bytes = path.stat().st_size
+        if min_size_bytes is not None and size_bytes < min_size_bytes:
+            continue
+        if max_size_bytes is not None and size_bytes > max_size_bytes:
             continue
         category = categorize(path)
         groups[category].append(path)
@@ -145,6 +161,18 @@ def main(argv=None):
         help="Skip files with this extension (repeatable, e.g. --exclude-ext .tmp)",
     )
     parser.add_argument(
+        "--min-size-bytes",
+        type=int,
+        metavar="BYTES",
+        help="Include only files at least this many bytes",
+    )
+    parser.add_argument(
+        "--max-size-bytes",
+        type=int,
+        metavar="BYTES",
+        help="Include only files at most this many bytes",
+    )
+    parser.add_argument(
         "--report-json",
         metavar="PATH",
         help="Write a JSON summary of planned or completed moves to PATH",
@@ -156,12 +184,25 @@ def main(argv=None):
         print(f"Error: target directory does not exist or is not a directory: {target}", file=sys.stderr)
         return 2
 
+    if args.min_size_bytes is not None and args.min_size_bytes < 0:
+        parser.error("--min-size-bytes must be non-negative")
+    if args.max_size_bytes is not None and args.max_size_bytes < 0:
+        parser.error("--max-size-bytes must be non-negative")
+    if (
+        args.min_size_bytes is not None
+        and args.max_size_bytes is not None
+        and args.min_size_bytes > args.max_size_bytes
+    ):
+        parser.error("--min-size-bytes cannot exceed --max-size-bytes")
+
     report_path = Path(args.report_json).expanduser().resolve() if args.report_json else None
     groups = scan_and_group(
         target,
         include_hidden=args.include_hidden,
         exclude_extensions=args.exclude_ext,
         recursive=args.recursive,
+        min_size_bytes=args.min_size_bytes,
+        max_size_bytes=args.max_size_bytes,
     )
 
     # An existing report inside the target must never be moved as an input file.
