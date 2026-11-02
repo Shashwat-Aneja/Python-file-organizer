@@ -18,8 +18,10 @@ Features:
 
 import argparse
 import json
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from collections import defaultdict
 
@@ -127,7 +129,7 @@ def scan_and_group(
 
 
 def write_report(report_path: Path, target: Path, dry_run: bool, actions: list):
-    """Persist machine-readable actions without including the report file itself."""
+    """Atomically persist a JSON report so a failed write preserves the previous report."""
     counts = {
         "planned": sum(action["status"] == "planned" for action in actions),
         "moved": sum(action["status"] == "moved" for action in actions),
@@ -139,7 +141,30 @@ def write_report(report_path: Path, target: Path, dry_run: bool, actions: list):
         "actions": actions,
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=report_path.parent,
+            prefix=f".{report_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            json.dump(report, temporary_file, indent=2)
+            temporary_file.write("\n")
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+
+        os.replace(temporary_path, report_path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def main(argv=None):
