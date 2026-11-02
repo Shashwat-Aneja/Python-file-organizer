@@ -1,4 +1,4 @@
-from organize_files import categorize, safe_move, scan_and_group
+from organize_files import categorize, safe_move, scan_and_group, write_report
 
 
 def test_hidden_files_are_excluded_by_default(tmp_path):
@@ -218,3 +218,22 @@ def test_recursive_scan_skips_hidden_directory_trees_by_default(tmp_path):
 
     assert groups["Documents"] == [visible]
     assert all(hidden not in files for files in groups.values())
+
+
+def test_write_report_preserves_previous_file_when_atomic_replace_fails(tmp_path, monkeypatch):
+    import pytest
+    import organize_files
+
+    report_path = tmp_path / "report.json"
+    report_path.write_text("previous report", encoding="utf-8")
+
+    def fail_replace(_source, _destination):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(organize_files.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="simulated replace failure"):
+        write_report(report_path, tmp_path, True, [])
+
+    assert report_path.read_text(encoding="utf-8") == "previous report"
+    assert list(tmp_path.glob(".report.json.*.tmp")) == []
