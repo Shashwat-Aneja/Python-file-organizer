@@ -237,3 +237,37 @@ def test_write_report_preserves_previous_file_when_atomic_replace_fails(tmp_path
 
     assert report_path.read_text(encoding="utf-8") == "previous report"
     assert list(tmp_path.glob(".report.json.*.tmp")) == []
+
+
+def test_safe_move_rejects_symbolic_link_destination_directories(tmp_path):
+    import pytest
+
+    source = tmp_path / "notes.txt"
+    source.write_text("keep source", encoding="utf-8")
+    external = tmp_path.parent / f"{tmp_path.name}-outside"
+    external.mkdir()
+    destination = tmp_path / "Documents"
+    try:
+        destination.symlink_to(external, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symbolic links are not supported on this platform")
+
+    with pytest.raises(ValueError, match="must not be a symbolic link"):
+        safe_move(source, destination)
+
+    assert source.read_text(encoding="utf-8") == "keep source"
+    assert list(external.iterdir()) == []
+
+
+def test_safe_move_rejects_file_as_destination_directory(tmp_path):
+    import pytest
+
+    source = tmp_path / "notes.txt"
+    source.write_text("keep source", encoding="utf-8")
+    destination = tmp_path / "Documents"
+    destination.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(NotADirectoryError, match="Destination path is not a directory"):
+        safe_move(source, destination)
+
+    assert source.read_text(encoding="utf-8") == "keep source"
