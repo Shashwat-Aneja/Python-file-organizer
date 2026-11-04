@@ -52,6 +52,11 @@ def categorize(path: Path):
 
 
 def safe_move(src: Path, dest_dir: Path, dry_run=False):
+    if dest_dir.is_symlink():
+        raise ValueError("Destination directory must not be a symbolic link.")
+    if dest_dir.exists() and not dest_dir.is_dir():
+        raise NotADirectoryError(f"Destination path is not a directory: {dest_dir}")
+
     dest = dest_dir / src.name
     # Treat dangling symlinks as occupied paths too. Path.exists() alone
     # follows symlinks and returns False when the link target is missing.
