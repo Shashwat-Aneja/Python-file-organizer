@@ -105,7 +105,13 @@ def scan_and_group(
         raise ValueError("min_size_bytes cannot exceed max_size_bytes.")
 
     groups = defaultdict(list)
-    paths = target.rglob("*") if recursive else target.iterdir()
+    paths = sorted(
+        target.rglob("*") if recursive else target.iterdir(),
+        key=lambda path: (
+            path.relative_to(target).as_posix().casefold(),
+            path.relative_to(target).as_posix(),
+        ),
+    )
     generated_categories = set(CATEGORIES) | {"Others"}
 
     for path in paths:
