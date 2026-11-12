@@ -69,9 +69,7 @@ def test_cli_rejects_a_missing_target_directory(tmp_path, monkeypatch, capsys):
     import pytest
     missing = tmp_path / "does-not-exist"
     monkeypatch.setattr("sys.argv", ["organize_files.py", str(missing)])
-    with pytest.raises(SystemExit) as exc_info:
-        main()
-    assert exc_info.value.code == 2
+    assert main() == 2
     assert "target directory does not exist" in capsys.readouterr().err
 
 
