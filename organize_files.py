@@ -51,7 +51,7 @@ def categorize(path: Path):
     return EXT_TO_CAT.get(ext, "Others")
 
 
-def safe_move(src: Path, dest_dir: Path, dry_run=False):
+def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=None):
     if dest_dir.is_symlink():
         raise ValueError("Destination directory must not be a symbolic link.")
     if dest_dir.exists() and not dest_dir.is_dir():
@@ -60,17 +60,20 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False):
     dest = dest_dir / src.name
     # Treat dangling symlinks as occupied paths too. Path.exists() alone
     # follows symlinks and returns False when the link target is missing.
-    if dest.exists() or dest.is_symlink():
+    if dest.exists() or dest.is_symlink() or (reserved_destinations is not None and dest in reserved_destinations):
         base = src.stem
         ext = src.suffix
         i = 1
         while True:
             candidate = dest_dir / f"{base}({i}){ext}"
-            if not candidate.exists() and not candidate.is_symlink():
+            if (not candidate.exists() and not candidate.is_symlink()
+                    and (reserved_destinations is None or candidate not in reserved_destinations)):
                 dest = candidate
                 break
             i += 1
     if dry_run:
+        if reserved_destinations is not None:
+            reserved_destinations.add(dest)
         print(f"[dry-run] Move: {src} -> {dest}")
         status = "planned"
     else:
@@ -260,11 +263,15 @@ def main(argv=None):
 
     print(f"Organizing files in: {target}")
     actions = []
+    reserved_destinations = set() if args.dry_run else None
     for category, files in sorted(groups.items()):
         print(f"\nCategory: {category} ({len(files)} files)")
         folder = target / category
         for file_path in files:
-            actions.append(safe_move(file_path, folder, dry_run=args.dry_run))
+            actions.append(safe_move(
+                file_path, folder, dry_run=args.dry_run,
+                reserved_destinations=reserved_destinations,
+            ))
 
     if report_path is not None:
         try:
