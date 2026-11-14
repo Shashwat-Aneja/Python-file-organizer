@@ -52,6 +52,8 @@ def categorize(path: Path):
 
 
 def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=None):
+    if src.is_symlink():
+        raise ValueError("Source file must not be a symbolic link.")
     if dest_dir.is_symlink():
         raise ValueError("Destination directory must not be a symbolic link.")
     if dest_dir.exists() and not dest_dir.is_dir():
