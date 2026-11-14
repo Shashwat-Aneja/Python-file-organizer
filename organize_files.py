@@ -78,8 +78,8 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
         status = "planned"
     else:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Move: {src} -> {dest}")
         shutil.move(str(src), str(dest))
+        print(f"Move: {src} -> {dest}")
         status = "moved"
     return {"source": str(src), "destination": str(dest), "status": status}
 
