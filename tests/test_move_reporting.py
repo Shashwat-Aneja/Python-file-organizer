@@ -23,5 +23,18 @@ class MoveReportingTests(unittest.TestCase):
             self.assertEqual(source.read_text(encoding="utf-8"), "preserve")
 
 
+    def test_direct_move_rejects_symlink_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            real = target / "real.txt"
+            real.write_text("original", encoding="utf-8")
+            link = target / "linked.txt"
+            link.symlink_to(real)
+            with self.assertRaisesRegex(ValueError, "symbolic link"):
+                safe_move(link, target / "Documents")
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(real.read_text(encoding="utf-8"), "original")
+
+
 if __name__ == "__main__":
     unittest.main()
