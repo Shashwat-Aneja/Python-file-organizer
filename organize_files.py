@@ -268,10 +268,14 @@ def main(argv=None):
         print(f"\nCategory: {category} ({len(files)} files)")
         folder = target / category
         for file_path in files:
-            actions.append(safe_move(
-                file_path, folder, dry_run=args.dry_run,
-                reserved_destinations=reserved_destinations,
-            ))
+            try:
+                actions.append(safe_move(
+                    file_path, folder, dry_run=args.dry_run,
+                    reserved_destinations=reserved_destinations,
+                ))
+            except (OSError, ValueError) as exc:
+                print(f"Error: could not move {file_path}: {exc}", file=sys.stderr)
+                return 1
 
     if report_path is not None:
         try:
