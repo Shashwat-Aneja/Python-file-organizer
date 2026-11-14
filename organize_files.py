@@ -52,6 +52,8 @@ def categorize(path: Path):
 
 
 def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=None):
+    if src.is_symlink():
+        raise ValueError("Source file must not be a symbolic link.")
     if dest_dir.is_symlink():
         raise ValueError("Destination directory must not be a symbolic link.")
     if dest_dir.exists() and not dest_dir.is_dir():
@@ -78,8 +80,8 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
         status = "planned"
     else:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Move: {src} -> {dest}")
         shutil.move(str(src), str(dest))
+        print(f"Move: {src} -> {dest}")
         status = "moved"
     return {"source": str(src), "destination": str(dest), "status": status}
 
