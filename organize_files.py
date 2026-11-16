@@ -268,7 +268,9 @@ def main(argv=None):
 
     print(f"Organizing files in: {target}")
     actions = []
-    reserved_destinations = set() if args.dry_run else None
+    # Reserve the report path even for real moves so writing the report cannot
+    # overwrite a newly organized input with the same destination name.
+    reserved_destinations = {report_path} if report_path is not None else set()
     for category, files in sorted(groups.items()):
         print(f"\nCategory: {category} ({len(files)} files)")
         folder = target / category
