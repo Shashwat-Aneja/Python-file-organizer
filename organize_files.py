@@ -240,14 +240,18 @@ def main(argv=None):
         parser.error("--min-size-bytes cannot exceed --max-size-bytes")
 
     report_path = Path(args.report_json).expanduser().resolve() if args.report_json else None
-    groups = scan_and_group(
-        target,
-        include_hidden=args.include_hidden,
-        exclude_extensions=args.exclude_ext,
-        recursive=args.recursive,
-        min_size_bytes=args.min_size_bytes,
-        max_size_bytes=args.max_size_bytes,
-    )
+    try:
+        groups = scan_and_group(
+            target,
+            include_hidden=args.include_hidden,
+            exclude_extensions=args.exclude_ext,
+            recursive=args.recursive,
+            min_size_bytes=args.min_size_bytes,
+            max_size_bytes=args.max_size_bytes,
+        )
+    except OSError as exc:
+        print(f"Error: could not scan target directory: {exc}", file=sys.stderr)
+        return 1
 
     # An existing report inside the target must never be moved as an input file.
     if report_path is not None:
