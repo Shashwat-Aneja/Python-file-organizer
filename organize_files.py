@@ -52,6 +52,8 @@ def categorize(path: Path):
 
 
 def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=None):
+    if not src.is_file() and not src.is_symlink():
+        raise ValueError("Source must be a regular file.")
     if src.is_symlink():
         raise ValueError("Source file must not be a symbolic link.")
     if dest_dir.is_symlink():
@@ -130,7 +132,8 @@ def scan_and_group(
         if not include_hidden and any(part.startswith(".") for part in relative.parts):
             # Hidden files and hidden directory trees are opt-in.
             continue
-        if path.is_dir():
+        if not path.is_file():
+            # FIFOs, sockets and devices must never be moved or opened as files.
             continue
         if path.suffix.lower() in excluded:
             continue
