@@ -17,6 +17,7 @@ Features:
 """
 
 import argparse
+import stat
 import json
 import os
 import shutil
@@ -51,7 +52,44 @@ def categorize(path: Path):
     return EXT_TO_CAT.get(ext, "Others")
 
 
+def _move_no_replace(src, dest):
+    """Copy to an exclusively created destination before removing the source."""
+    descriptor = os.open(src, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    created = False
+    destination_identity = None
+    try:
+        with os.fdopen(descriptor, "rb") as source:
+            source_identity = os.fstat(source.fileno())
+            if not stat.S_ISREG(source_identity.st_mode):
+                raise ValueError("Source must be a regular file.")
+            with dest.open("xb") as output:
+                created = True
+                destination_identity = os.fstat(output.fileno())
+                shutil.copyfileobj(source, output)
+                output.flush()
+                os.fsync(output.fileno())
+            shutil.copystat(src, dest, follow_symlinks=False)
+            current = src.lstat()
+            if (current.st_dev, current.st_ino) != (source_identity.st_dev, source_identity.st_ino):
+                # Keep the completed copy of the original and the replacement
+                # source. Never unlink another writer's replacement file.
+                created = False
+                raise OSError("Source changed while being moved; both files were preserved.")
+            src.unlink()
+            created = False
+    finally:
+        if created and destination_identity is not None:
+            try:
+                current = dest.lstat()
+                if (current.st_dev, current.st_ino) == (destination_identity.st_dev, destination_identity.st_ino):
+                    dest.unlink()
+            except FileNotFoundError:
+                pass
+
+
 def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=None):
+    if not src.is_file() and not src.is_symlink():
+        raise ValueError("Source must be a regular file.")
     if src.is_symlink():
         raise ValueError("Source file must not be a symbolic link.")
     if dest_dir.is_symlink():
@@ -80,7 +118,20 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
         status = "planned"
     else:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dest))
+        while True:
+            try:
+                _move_no_replace(src, dest)
+                break
+            except FileExistsError:
+                # A concurrent writer won the name after the initial scan.
+                base, ext = src.stem, src.suffix
+                i = 1
+                while True:
+                    dest = dest_dir / f"{base}({i}){ext}"
+                    if (not dest.exists() and not dest.is_symlink()
+                            and (reserved_destinations is None or dest not in reserved_destinations)):
+                        break
+                    i += 1
         print(f"Move: {src} -> {dest}")
         status = "moved"
     return {"source": str(src), "destination": str(dest), "status": status}
@@ -93,6 +144,7 @@ def scan_and_group(
     recursive: bool = False,
     min_size_bytes=None,
     max_size_bytes=None,
+    exclude_directories=None,
 ):
     """Group files by category, optionally discovering files below the target."""
     excluded = {
@@ -109,6 +161,7 @@ def scan_and_group(
     if min_size_bytes is not None and max_size_bytes is not None and min_size_bytes > max_size_bytes:
         raise ValueError("min_size_bytes cannot exceed max_size_bytes.")
 
+    excluded_directories = set(exclude_directories or [])
     groups = defaultdict(list)
     paths = sorted(
         target.rglob("*") if recursive else target.iterdir(),
@@ -121,6 +174,8 @@ def scan_and_group(
 
     for path in paths:
         relative = path.relative_to(target)
+        if any(part in excluded_directories for part in relative.parts[:-1]):
+            continue
         if path.is_symlink():
             # Avoid moving a link whose target may be outside the selected directory.
             continue
@@ -130,7 +185,8 @@ def scan_and_group(
         if not include_hidden and any(part.startswith(".") for part in relative.parts):
             # Hidden files and hidden directory trees are opt-in.
             continue
-        if path.is_dir():
+        if not path.is_file():
+            # FIFOs, sockets and devices must never be moved or opened as files.
             continue
         if path.suffix.lower() in excluded:
             continue
@@ -218,6 +274,7 @@ def main(argv=None):
         metavar="PATH",
         help="Write a JSON summary of planned or completed moves to PATH",
     )
+    parser.add_argument("--exclude-dir", action="append", default=[], help="Skip a directory name during recursive discovery (repeatable)")
     args = parser.parse_args(argv)
 
     target = Path(args.target).resolve()
@@ -237,14 +294,19 @@ def main(argv=None):
         parser.error("--min-size-bytes cannot exceed --max-size-bytes")
 
     report_path = Path(args.report_json).expanduser().resolve() if args.report_json else None
-    groups = scan_and_group(
-        target,
-        include_hidden=args.include_hidden,
-        exclude_extensions=args.exclude_ext,
-        recursive=args.recursive,
-        min_size_bytes=args.min_size_bytes,
-        max_size_bytes=args.max_size_bytes,
-    )
+    try:
+        groups = scan_and_group(
+            target,
+            include_hidden=args.include_hidden,
+            exclude_extensions=args.exclude_ext,
+            recursive=args.recursive,
+            min_size_bytes=args.min_size_bytes,
+            max_size_bytes=args.max_size_bytes,
+            exclude_directories=args.exclude_dir,
+        )
+    except OSError as exc:
+        print(f"Error: could not scan target directory: {exc}", file=sys.stderr)
+        return 1
 
     # An existing report inside the target must never be moved as an input file.
     if report_path is not None:
@@ -265,7 +327,9 @@ def main(argv=None):
 
     print(f"Organizing files in: {target}")
     actions = []
-    reserved_destinations = set() if args.dry_run else None
+    # Reserve the report path even for real moves so writing the report cannot
+    # overwrite a newly organized input with the same destination name.
+    reserved_destinations = {report_path} if report_path is not None else set()
     for category, files in sorted(groups.items()):
         print(f"\nCategory: {category} ({len(files)} files)")
         folder = target / category
@@ -277,6 +341,11 @@ def main(argv=None):
                 ))
             except (OSError, ValueError) as exc:
                 print(f"Error: could not move {file_path}: {exc}", file=sys.stderr)
+                if report_path is not None:
+                    try:
+                        write_report(report_path, target, args.dry_run, actions)
+                    except OSError as report_error:
+                        print(f"Error: could not write partial JSON report: {report_error}", file=sys.stderr)
                 return 1
 
     if report_path is not None:

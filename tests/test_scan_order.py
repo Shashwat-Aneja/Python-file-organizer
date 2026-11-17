@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 
 from organize_files import scan_and_group
@@ -7,6 +8,8 @@ def test_non_recursive_scan_order_is_casefolded_and_stable(tmp_path):
     (tmp_path / "z.txt").write_text("z", encoding="utf-8")
     (tmp_path / "a.txt").write_text("a", encoding="utf-8")
     (tmp_path / "A.txt").write_text("upper", encoding="utf-8")
+    if len(list(tmp_path.glob("[aA].txt"))) < 2:
+        pytest.skip("filesystem cannot represent case-distinct filenames")
 
     groups = scan_and_group(tmp_path)
 
