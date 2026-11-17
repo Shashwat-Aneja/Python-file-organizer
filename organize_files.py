@@ -17,6 +17,7 @@ Features:
 """
 
 import argparse
+import stat
 import json
 import os
 import shutil
@@ -51,6 +52,41 @@ def categorize(path: Path):
     return EXT_TO_CAT.get(ext, "Others")
 
 
+def _move_no_replace(src, dest):
+    """Copy to an exclusively created destination before removing the source."""
+    descriptor = os.open(src, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    created = False
+    destination_identity = None
+    try:
+        with os.fdopen(descriptor, "rb") as source:
+            source_identity = os.fstat(source.fileno())
+            if not stat.S_ISREG(source_identity.st_mode):
+                raise ValueError("Source must be a regular file.")
+            with dest.open("xb") as output:
+                created = True
+                destination_identity = os.fstat(output.fileno())
+                shutil.copyfileobj(source, output)
+                output.flush()
+                os.fsync(output.fileno())
+            shutil.copystat(src, dest, follow_symlinks=False)
+            current = src.lstat()
+            if (current.st_dev, current.st_ino) != (source_identity.st_dev, source_identity.st_ino):
+                # Keep the completed copy of the original and the replacement
+                # source. Never unlink another writer's replacement file.
+                created = False
+                raise OSError("Source changed while being moved; both files were preserved.")
+            src.unlink()
+            created = False
+    finally:
+        if created and destination_identity is not None:
+            try:
+                current = dest.lstat()
+                if (current.st_dev, current.st_ino) == (destination_identity.st_dev, destination_identity.st_ino):
+                    dest.unlink()
+            except FileNotFoundError:
+                pass
+
+
 def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=None):
     if not src.is_file() and not src.is_symlink():
         raise ValueError("Source must be a regular file.")
@@ -82,7 +118,20 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
         status = "planned"
     else:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dest))
+        while True:
+            try:
+                _move_no_replace(src, dest)
+                break
+            except FileExistsError:
+                # A concurrent writer won the name after the initial scan.
+                base, ext = src.stem, src.suffix
+                i = 1
+                while True:
+                    dest = dest_dir / f"{base}({i}){ext}"
+                    if (not dest.exists() and not dest.is_symlink()
+                            and (reserved_destinations is None or dest not in reserved_destinations)):
+                        break
+                    i += 1
         print(f"Move: {src} -> {dest}")
         status = "moved"
     return {"source": str(src), "destination": str(dest), "status": status}

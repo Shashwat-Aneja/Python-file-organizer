@@ -15,7 +15,7 @@ class MoveReportingTests(unittest.TestCase):
             source = target / "report.txt"
             source.write_text("preserve", encoding="utf-8")
             output = io.StringIO()
-            with patch("organize_files.shutil.move", side_effect=PermissionError("denied")):
+            with patch("organize_files._move_no_replace", side_effect=PermissionError("denied")):
                 with contextlib.redirect_stdout(output):
                     with self.assertRaises(PermissionError):
                         safe_move(source, target / "Documents")
