@@ -144,6 +144,7 @@ def scan_and_group(
     recursive: bool = False,
     min_size_bytes=None,
     max_size_bytes=None,
+    exclude_directories=None,
 ):
     """Group files by category, optionally discovering files below the target."""
     excluded = {
@@ -160,6 +161,7 @@ def scan_and_group(
     if min_size_bytes is not None and max_size_bytes is not None and min_size_bytes > max_size_bytes:
         raise ValueError("min_size_bytes cannot exceed max_size_bytes.")
 
+    excluded_directories = set(exclude_directories or [])
     groups = defaultdict(list)
     paths = sorted(
         target.rglob("*") if recursive else target.iterdir(),
@@ -172,6 +174,8 @@ def scan_and_group(
 
     for path in paths:
         relative = path.relative_to(target)
+        if any(part in excluded_directories for part in relative.parts[:-1]):
+            continue
         if path.is_symlink():
             # Avoid moving a link whose target may be outside the selected directory.
             continue
@@ -270,6 +274,7 @@ def main(argv=None):
         metavar="PATH",
         help="Write a JSON summary of planned or completed moves to PATH",
     )
+    parser.add_argument("--exclude-dir", action="append", default=[], help="Skip a directory name during recursive discovery (repeatable)")
     args = parser.parse_args(argv)
 
     target = Path(args.target).resolve()
@@ -297,6 +302,7 @@ def main(argv=None):
             recursive=args.recursive,
             min_size_bytes=args.min_size_bytes,
             max_size_bytes=args.max_size_bytes,
+            exclude_directories=args.exclude_dir,
         )
     except OSError as exc:
         print(f"Error: could not scan target directory: {exc}", file=sys.stderr)

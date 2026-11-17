@@ -73,3 +73,5 @@ Jupyter Notebook files (`.ipynb`) are placed in a dedicated `Notebooks` folder. 
 Moves now copy into an exclusively created destination, flush it, and remove the source only after success. This prevents concurrent destination overwrites and works across filesystems, at the cost of copying file contents. Partial copy failures preserve the source and clean up the incomplete destination.
 
 When a later move fails, `--report-json` records all completed moves before the command exits with status 1.
+
+Use `--recursive --exclude-dir build --exclude-dir node_modules` to leave generated or dependency directories untouched.
