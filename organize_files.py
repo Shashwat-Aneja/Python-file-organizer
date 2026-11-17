@@ -335,6 +335,11 @@ def main(argv=None):
                 ))
             except (OSError, ValueError) as exc:
                 print(f"Error: could not move {file_path}: {exc}", file=sys.stderr)
+                if report_path is not None:
+                    try:
+                        write_report(report_path, target, args.dry_run, actions)
+                    except OSError as report_error:
+                        print(f"Error: could not write partial JSON report: {report_error}", file=sys.stderr)
                 return 1
 
     if report_path is not None:
