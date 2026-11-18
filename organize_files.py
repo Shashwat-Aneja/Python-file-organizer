@@ -137,6 +137,25 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
     return {"source": str(src), "destination": str(dest), "status": status}
 
 
+def discover_paths(target, recursive, include_hidden, excluded_directories):
+    if not recursive:
+        return target.iterdir()
+    generated_categories = set(CATEGORIES) | {"Others"}
+    def raise_walk_error(error):
+        raise error
+    def walk():
+        for root, directories, files in os.walk(target, topdown=True, followlinks=False, onerror=raise_walk_error):
+            current = Path(root)
+            directories[:] = [name for name in directories
+                if name not in excluded_directories
+                and (include_hidden or not name.startswith("."))
+                and not (current == target and name in generated_categories)
+                and not (current / name).is_symlink()]
+            for name in files:
+                yield current / name
+    return walk()
+
+
 def scan_and_group(
     target: Path,
     include_hidden: bool = False,
@@ -164,7 +183,7 @@ def scan_and_group(
     excluded_directories = set(exclude_directories or [])
     groups = defaultdict(list)
     paths = sorted(
-        target.rglob("*") if recursive else target.iterdir(),
+        discover_paths(target, recursive, include_hidden, excluded_directories),
         key=lambda path: (
             path.relative_to(target).as_posix().casefold(),
             path.relative_to(target).as_posix(),
@@ -205,6 +224,7 @@ def write_report(report_path: Path, target: Path, dry_run: bool, actions: list):
     counts = {
         "planned": sum(action["status"] == "planned" for action in actions),
         "moved": sum(action["status"] == "moved" for action in actions),
+        "failed": sum(action["status"] == "failed" for action in actions),
     }
     report = {
         "target": str(target),
@@ -342,6 +362,8 @@ def main(argv=None):
             except (OSError, ValueError) as exc:
                 print(f"Error: could not move {file_path}: {exc}", file=sys.stderr)
                 if report_path is not None:
+                    actions.append({"source": str(file_path), "destination": None,
+                                    "status": "failed", "error": str(exc)})
                     try:
                         write_report(report_path, target, args.dry_run, actions)
                     except OSError as report_error:

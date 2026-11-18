@@ -75,3 +75,7 @@ Moves now copy into an exclusively created destination, flush it, and remove the
 When a later move fails, `--report-json` records all completed moves before the command exits with status 1.
 
 Use `--recursive --exclude-dir build --exclude-dir node_modules` to leave generated or dependency directories untouched.
+
+Recursive scans prune excluded, hidden and generated category directories before entering them. This avoids traversing large dependency trees and makes exclusions effective for unreadable subdirectories too.
+
+A partial JSON report includes a `failed` summary count and a failed action with source and error text, so automation can distinguish incomplete runs from successful moves.
