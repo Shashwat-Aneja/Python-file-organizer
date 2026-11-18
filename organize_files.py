@@ -224,6 +224,7 @@ def write_report(report_path: Path, target: Path, dry_run: bool, actions: list):
     counts = {
         "planned": sum(action["status"] == "planned" for action in actions),
         "moved": sum(action["status"] == "moved" for action in actions),
+        "failed": sum(action["status"] == "failed" for action in actions),
     }
     report = {
         "target": str(target),
@@ -361,6 +362,8 @@ def main(argv=None):
             except (OSError, ValueError) as exc:
                 print(f"Error: could not move {file_path}: {exc}", file=sys.stderr)
                 if report_path is not None:
+                    actions.append({"source": str(file_path), "destination": None,
+                                    "status": "failed", "error": str(exc)})
                     try:
                         write_report(report_path, target, args.dry_run, actions)
                     except OSError as report_error:
