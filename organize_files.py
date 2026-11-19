@@ -75,6 +75,9 @@ def _move_no_replace(src, dest):
                 # source. Never unlink another writer's replacement file.
                 created = False
                 raise OSError("Source changed while being moved; both files were preserved.")
+            if (current.st_size, current.st_mtime_ns) != (source_identity.st_size, source_identity.st_mtime_ns):
+                created = False
+                raise OSError("Source content changed while being moved; both files were preserved.")
             src.unlink()
             created = False
     finally:
