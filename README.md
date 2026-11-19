@@ -79,3 +79,5 @@ Use `--recursive --exclude-dir build --exclude-dir node_modules` to leave genera
 Recursive scans prune excluded, hidden and generated category directories before entering them. This avoids traversing large dependency trees and makes exclusions effective for unreadable subdirectories too.
 
 A partial JSON report includes a `failed` summary count and a failed action with source and error text, so automation can distinguish incomplete runs from successful moves.
+
+Use `--continue-on-error` to process remaining files after a failed move. The exit status stays nonzero, and JSON reports include each failure. The default still stops at the first failure.
