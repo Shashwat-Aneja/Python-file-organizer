@@ -298,6 +298,7 @@ def main(argv=None):
         help="Write a JSON summary of planned or completed moves to PATH",
     )
     parser.add_argument("--exclude-dir", action="append", default=[], help="Skip a directory name during recursive discovery (repeatable)")
+    parser.add_argument("--continue-on-error", action="store_true", help="Continue other moves after a failure; return failure and retain failed audit entries")
     args = parser.parse_args(argv)
 
     target = Path(args.target).resolve()
@@ -350,6 +351,7 @@ def main(argv=None):
 
     print(f"Organizing files in: {target}")
     actions = []
+    had_failures = False
     # Reserve the report path even for real moves so writing the report cannot
     # overwrite a newly organized input with the same destination name.
     reserved_destinations = {report_path} if report_path is not None else set()
@@ -364,14 +366,16 @@ def main(argv=None):
                 ))
             except (OSError, ValueError) as exc:
                 print(f"Error: could not move {file_path}: {exc}", file=sys.stderr)
+                had_failures = True
+                actions.append({"source": str(file_path), "destination": None,
+                                "status": "failed", "error": str(exc)})
                 if report_path is not None:
-                    actions.append({"source": str(file_path), "destination": None,
-                                    "status": "failed", "error": str(exc)})
                     try:
                         write_report(report_path, target, args.dry_run, actions)
                     except OSError as report_error:
                         print(f"Error: could not write partial JSON report: {report_error}", file=sys.stderr)
-                return 1
+                if not args.continue_on_error:
+                    return 1
 
     if report_path is not None:
         try:
@@ -381,7 +385,7 @@ def main(argv=None):
             return 1
 
     print("\nDone.")
-    return 0
+    return 1 if had_failures else 0
 
 
 if __name__ == "__main__":
