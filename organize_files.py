@@ -143,7 +143,7 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
 def discover_paths(target, recursive, include_hidden, excluded_directories):
     if not recursive:
         return target.iterdir()
-    generated_categories = set(CATEGORIES) | {"Others"}
+    generated_categories = {name.casefold() for name in set(CATEGORIES) | {"Others"}}
     def raise_walk_error(error):
         raise error
     def walk():
@@ -152,7 +152,7 @@ def discover_paths(target, recursive, include_hidden, excluded_directories):
             directories[:] = [name for name in directories
                 if name not in excluded_directories
                 and (include_hidden or not name.startswith("."))
-                and not (current == target and name in generated_categories)
+                and not (current == target and name.casefold() in generated_categories)
                 and not (current / name).is_symlink()]
             for name in files:
                 yield current / name
@@ -192,7 +192,7 @@ def scan_and_group(
             path.relative_to(target).as_posix(),
         ),
     )
-    generated_categories = set(CATEGORIES) | {"Others"}
+    generated_categories = {name.casefold() for name in set(CATEGORIES) | {"Others"}}
 
     for path in paths:
         relative = path.relative_to(target)
@@ -201,7 +201,7 @@ def scan_and_group(
         if path.is_symlink():
             # Avoid moving a link whose target may be outside the selected directory.
             continue
-        if recursive and relative.parts[0] in generated_categories:
+        if recursive and relative.parts[0].casefold() in generated_categories:
             # Do not reprocess files already placed in organizer output folders.
             continue
         if not include_hidden and any(part.startswith(".") for part in relative.parts):
@@ -299,6 +299,7 @@ def main(argv=None):
     )
     parser.add_argument("--exclude-dir", action="append", default=[], help="Skip a directory name during recursive discovery (repeatable)")
     parser.add_argument("--continue-on-error", action="store_true", help="Continue other moves after a failure; return failure and retain failed audit entries")
+    parser.add_argument("--category", action="append", choices=sorted(set(CATEGORIES) | {"Others"}), help="Organize only a selected category (repeatable)")
     args = parser.parse_args(argv)
 
     target = Path(args.target).resolve()
@@ -318,6 +319,13 @@ def main(argv=None):
         parser.error("--min-size-bytes cannot exceed --max-size-bytes")
 
     report_path = Path(args.report_json).expanduser().resolve() if args.report_json else None
+    if report_path is not None:
+        ancestor = report_path
+        while not ancestor.exists() and ancestor != ancestor.parent:
+            ancestor = ancestor.parent
+        if report_path.is_dir() or (ancestor != report_path and not ancestor.is_dir()):
+            print("Error: JSON report destination must be a file under a directory.", file=sys.stderr)
+            return 1
     try:
         groups = scan_and_group(
             target,
@@ -331,6 +339,9 @@ def main(argv=None):
     except OSError as exc:
         print(f"Error: could not scan target directory: {exc}", file=sys.stderr)
         return 1
+
+    if args.category:
+        groups = {category: files for category, files in groups.items() if category in args.category}
 
     # An existing report inside the target must never be moved as an input file.
     if report_path is not None:

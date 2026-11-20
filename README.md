@@ -81,3 +81,5 @@ Recursive scans prune excluded, hidden and generated category directories before
 A partial JSON report includes a `failed` summary count and a failed action with source and error text, so automation can distinguish incomplete runs from successful moves.
 
 Use `--continue-on-error` to process remaining files after a failed move. The exit status stays nonzero, and JSON reports include each failure. The default still stops at the first failure.
+
+Use repeatable `--category Documents --category Images` options to organize only selected categories. Other source files remain in place and are not included in the action report. Without this option every discovered category is processed.
