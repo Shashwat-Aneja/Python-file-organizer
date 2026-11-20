@@ -318,6 +318,13 @@ def main(argv=None):
         parser.error("--min-size-bytes cannot exceed --max-size-bytes")
 
     report_path = Path(args.report_json).expanduser().resolve() if args.report_json else None
+    if report_path is not None:
+        ancestor = report_path
+        while not ancestor.exists() and ancestor != ancestor.parent:
+            ancestor = ancestor.parent
+        if report_path.is_dir() or (ancestor != report_path and not ancestor.is_dir()):
+            print("Error: JSON report destination must be a file under a directory.", file=sys.stderr)
+            return 1
     try:
         groups = scan_and_group(
             target,
