@@ -143,7 +143,7 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
 def discover_paths(target, recursive, include_hidden, excluded_directories):
     if not recursive:
         return target.iterdir()
-    generated_categories = set(CATEGORIES) | {"Others"}
+    generated_categories = {name.casefold() for name in set(CATEGORIES) | {"Others"}}
     def raise_walk_error(error):
         raise error
     def walk():
@@ -152,7 +152,7 @@ def discover_paths(target, recursive, include_hidden, excluded_directories):
             directories[:] = [name for name in directories
                 if name not in excluded_directories
                 and (include_hidden or not name.startswith("."))
-                and not (current == target and name in generated_categories)
+                and not (current == target and name.casefold() in generated_categories)
                 and not (current / name).is_symlink()]
             for name in files:
                 yield current / name
@@ -192,7 +192,7 @@ def scan_and_group(
             path.relative_to(target).as_posix(),
         ),
     )
-    generated_categories = set(CATEGORIES) | {"Others"}
+    generated_categories = {name.casefold() for name in set(CATEGORIES) | {"Others"}}
 
     for path in paths:
         relative = path.relative_to(target)
@@ -201,7 +201,7 @@ def scan_and_group(
         if path.is_symlink():
             # Avoid moving a link whose target may be outside the selected directory.
             continue
-        if recursive and relative.parts[0] in generated_categories:
+        if recursive and relative.parts[0].casefold() in generated_categories:
             # Do not reprocess files already placed in organizer output folders.
             continue
         if not include_hidden and any(part.startswith(".") for part in relative.parts):
