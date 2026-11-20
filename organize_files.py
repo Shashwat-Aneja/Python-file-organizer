@@ -299,6 +299,7 @@ def main(argv=None):
     )
     parser.add_argument("--exclude-dir", action="append", default=[], help="Skip a directory name during recursive discovery (repeatable)")
     parser.add_argument("--continue-on-error", action="store_true", help="Continue other moves after a failure; return failure and retain failed audit entries")
+    parser.add_argument("--category", action="append", choices=sorted(set(CATEGORIES) | {"Others"}), help="Organize only a selected category (repeatable)")
     args = parser.parse_args(argv)
 
     target = Path(args.target).resolve()
@@ -338,6 +339,9 @@ def main(argv=None):
     except OSError as exc:
         print(f"Error: could not scan target directory: {exc}", file=sys.stderr)
         return 1
+
+    if args.category:
+        groups = {category: files for category, files in groups.items() if category in args.category}
 
     # An existing report inside the target must never be moved as an input file.
     if report_path is not None:
