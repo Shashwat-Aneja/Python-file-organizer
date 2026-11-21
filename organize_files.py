@@ -323,7 +323,7 @@ def main(argv=None):
         ancestor = report_path
         while not ancestor.exists() and ancestor != ancestor.parent:
             ancestor = ancestor.parent
-        if report_path.is_dir() or (ancestor != report_path and not ancestor.is_dir()):
+        if (report_path.exists() and not report_path.is_file()) or (ancestor != report_path and not ancestor.is_dir()):
             print("Error: JSON report destination must be a file under a directory.", file=sys.stderr)
             return 1
     try:
