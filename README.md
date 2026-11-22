@@ -83,3 +83,5 @@ A partial JSON report includes a `failed` summary count and a failed action with
 Use `--continue-on-error` to process remaining files after a failed move. The exit status stays nonzero, and JSON reports include each failure. The default still stops at the first failure.
 
 Use repeatable `--category Documents --category Images` options to organize only selected categories. Other source files remain in place and are not included in the action report. Without this option every discovered category is processed.
+
+`--older-than-days N` organizes only files with modification times at least N days old, helping leave recent downloads and active files in place. It combines with size, category and extension filters; the default has no age restriction. The programmatic scanner accepts `min_age_seconds`.
