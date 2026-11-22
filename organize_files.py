@@ -17,6 +17,9 @@ Features:
 """
 
 import argparse
+import math
+import time
+from numbers import Real
 import stat
 import json
 import os
@@ -167,6 +170,7 @@ def scan_and_group(
     min_size_bytes=None,
     max_size_bytes=None,
     exclude_directories=None,
+    min_age_seconds=None,
 ):
     """Group files by category, optionally discovering files below the target."""
     excluded = {
@@ -183,6 +187,9 @@ def scan_and_group(
     if min_size_bytes is not None and max_size_bytes is not None and min_size_bytes > max_size_bytes:
         raise ValueError("min_size_bytes cannot exceed max_size_bytes.")
 
+    if min_age_seconds is not None and (isinstance(min_age_seconds, bool) or not isinstance(min_age_seconds, Real) or not math.isfinite(min_age_seconds) or min_age_seconds < 0):
+        raise ValueError("min_age_seconds must be a finite non-negative number.")
+    age_cutoff = time.time() - min_age_seconds if min_age_seconds is not None else None
     excluded_directories = set(exclude_directories or [])
     groups = defaultdict(list)
     paths = sorted(
@@ -212,7 +219,10 @@ def scan_and_group(
             continue
         if path.suffix.lower() in excluded:
             continue
-        size_bytes = path.stat().st_size
+        metadata = path.stat()
+        if age_cutoff is not None and metadata.st_mtime > age_cutoff:
+            continue
+        size_bytes = metadata.st_size
         if min_size_bytes is not None and size_bytes < min_size_bytes:
             continue
         if max_size_bytes is not None and size_bytes > max_size_bytes:
@@ -300,7 +310,11 @@ def main(argv=None):
     parser.add_argument("--exclude-dir", action="append", default=[], help="Skip a directory name during recursive discovery (repeatable)")
     parser.add_argument("--continue-on-error", action="store_true", help="Continue other moves after a failure; return failure and retain failed audit entries")
     parser.add_argument("--category", action="append", choices=sorted(set(CATEGORIES) | {"Others"}), help="Organize only a selected category (repeatable)")
+    parser.add_argument("--older-than-days", type=float, help="Organize only files whose modification time is at least N days old")
     args = parser.parse_args(argv)
+    min_age_seconds = args.older_than_days * 86400 if args.older_than_days is not None else None
+    if min_age_seconds is not None and (not math.isfinite(min_age_seconds) or min_age_seconds < 0):
+        parser.error("--older-than-days must be a finite non-negative duration")
 
     target = Path(args.target).resolve()
     if not target.exists() or not target.is_dir():
@@ -335,6 +349,7 @@ def main(argv=None):
             min_size_bytes=args.min_size_bytes,
             max_size_bytes=args.max_size_bytes,
             exclude_directories=args.exclude_dir,
+            **({"min_age_seconds": min_age_seconds} if min_age_seconds is not None else {}),
         )
     except OSError as exc:
         print(f"Error: could not scan target directory: {exc}", file=sys.stderr)
