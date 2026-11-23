@@ -85,3 +85,5 @@ Use `--continue-on-error` to process remaining files after a failed move. The ex
 Use repeatable `--category Documents --category Images` options to organize only selected categories. Other source files remain in place and are not included in the action report. Without this option every discovered category is processed.
 
 `--older-than-days N` organizes only files with modification times at least N days old, helping leave recent downloads and active files in place. It combines with size, category and extension filters; the default has no age restriction. The programmatic scanner accepts `min_age_seconds`.
+
+Opt in to `--include-sizes --report-json audit.json` for per-file `size_bytes` and planned/moved byte totals. Dry runs observe current source sizes; successful moves report the source descriptor size validated during copying. Failed actions have no successful byte count. Default report fields are unchanged.
