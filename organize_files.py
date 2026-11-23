@@ -17,6 +17,7 @@ Features:
 """
 
 import argparse
+from fnmatch import fnmatchcase
 import math
 import time
 from numbers import Real
@@ -83,6 +84,7 @@ def _move_no_replace(src, dest):
                 raise OSError("Source content changed while being moved; both files were preserved.")
             src.unlink()
             created = False
+            return source_identity.st_size
     finally:
         if created and destination_identity is not None:
             try:
@@ -93,7 +95,7 @@ def _move_no_replace(src, dest):
                 pass
 
 
-def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=None):
+def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=None, include_sizes=False):
     if not src.is_file() and not src.is_symlink():
         raise ValueError("Source must be a regular file.")
     if src.is_symlink():
@@ -117,6 +119,7 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
                 dest = candidate
                 break
             i += 1
+    size_bytes = src.stat().st_size if dry_run and include_sizes else None
     if dry_run:
         if reserved_destinations is not None:
             reserved_destinations.add(dest)
@@ -126,7 +129,7 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
         dest_dir.mkdir(parents=True, exist_ok=True)
         while True:
             try:
-                _move_no_replace(src, dest)
+                size_bytes = _move_no_replace(src, dest)
                 break
             except FileExistsError:
                 # A concurrent writer won the name after the initial scan.
@@ -140,7 +143,10 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
                     i += 1
         print(f"Move: {src} -> {dest}")
         status = "moved"
-    return {"source": str(src), "destination": str(dest), "status": status}
+    action = {"source": str(src), "destination": str(dest), "status": status}
+    if include_sizes:
+        action["size_bytes"] = size_bytes
+    return action
 
 
 def discover_paths(target, recursive, include_hidden, excluded_directories):
@@ -171,8 +177,11 @@ def scan_and_group(
     max_size_bytes=None,
     exclude_directories=None,
     min_age_seconds=None,
+    include_patterns=None,
 ):
     """Group files by category, optionally discovering files below the target."""
+    if include_patterns is not None and (not isinstance(include_patterns, (list, tuple)) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in include_patterns)):
+        raise ValueError("include_patterns must be a list of non-empty patterns.")
     excluded = {
         ("." + extension.strip().lstrip(".")).lower()
         for extension in (exclude_extensions or [])
@@ -203,6 +212,8 @@ def scan_and_group(
 
     for path in paths:
         relative = path.relative_to(target)
+        if include_patterns and not any(fnmatchcase(relative.as_posix(), pattern) for pattern in include_patterns):
+            continue
         if any(part in excluded_directories for part in relative.parts[:-1]):
             continue
         if path.is_symlink():
@@ -232,13 +243,15 @@ def scan_and_group(
     return groups
 
 
-def write_report(report_path: Path, target: Path, dry_run: bool, actions: list):
+def write_report(report_path: Path, target: Path, dry_run: bool, actions: list, include_sizes=False):
     """Atomically persist a JSON report so a failed write preserves the previous report."""
     counts = {
         "planned": sum(action["status"] == "planned" for action in actions),
         "moved": sum(action["status"] == "moved" for action in actions),
         "failed": sum(action["status"] == "failed" for action in actions),
     }
+    if include_sizes or any("size_bytes" in action for action in actions):
+        counts.update({f"{status}_bytes": sum(action.get("size_bytes") or 0 for action in actions if action["status"] == status) for status in ("planned", "moved")})
     report = {
         "target": str(target),
         "dry_run": dry_run,
@@ -311,7 +324,11 @@ def main(argv=None):
     parser.add_argument("--continue-on-error", action="store_true", help="Continue other moves after a failure; return failure and retain failed audit entries")
     parser.add_argument("--category", action="append", choices=sorted(set(CATEGORIES) | {"Others"}), help="Organize only a selected category (repeatable)")
     parser.add_argument("--older-than-days", type=float, help="Organize only files whose modification time is at least N days old")
+    parser.add_argument("--include-sizes", action="store_true", help="Include observed file bytes and planned/moved byte totals in audit reports")
+    parser.add_argument("--include-pattern", action="append", default=[], help="Include relative POSIX paths matching any case-sensitive fnmatch pattern (repeatable)")
     args = parser.parse_args(argv)
+    if any(not pattern.strip() for pattern in args.include_pattern):
+        parser.error("--include-pattern cannot be empty")
     min_age_seconds = args.older_than_days * 86400 if args.older_than_days is not None else None
     if min_age_seconds is not None and (not math.isfinite(min_age_seconds) or min_age_seconds < 0):
         parser.error("--older-than-days must be a finite non-negative duration")
@@ -349,6 +366,7 @@ def main(argv=None):
             min_size_bytes=args.min_size_bytes,
             max_size_bytes=args.max_size_bytes,
             exclude_directories=args.exclude_dir,
+            **({"include_patterns": args.include_pattern} if args.include_pattern else {}),
             **({"min_age_seconds": min_age_seconds} if min_age_seconds is not None else {}),
         )
     except OSError as exc:
@@ -369,7 +387,7 @@ def main(argv=None):
         print("No files to organize.")
         if report_path is not None:
             try:
-                write_report(report_path, target, args.dry_run, [])
+                write_report(report_path, target, args.dry_run, [], **({"include_sizes": True} if args.include_sizes else {}))
             except OSError as exc:
                 print(f"Error: could not write JSON report: {exc}", file=sys.stderr)
                 return 1
@@ -389,6 +407,7 @@ def main(argv=None):
                 actions.append(safe_move(
                     file_path, folder, dry_run=args.dry_run,
                     reserved_destinations=reserved_destinations,
+                    **({"include_sizes": True} if args.include_sizes else {}),
                 ))
             except (OSError, ValueError) as exc:
                 print(f"Error: could not move {file_path}: {exc}", file=sys.stderr)
@@ -397,7 +416,7 @@ def main(argv=None):
                                 "status": "failed", "error": str(exc)})
                 if report_path is not None:
                     try:
-                        write_report(report_path, target, args.dry_run, actions)
+                        write_report(report_path, target, args.dry_run, actions, **({"include_sizes": True} if args.include_sizes else {}))
                     except OSError as report_error:
                         print(f"Error: could not write partial JSON report: {report_error}", file=sys.stderr)
                 if not args.continue_on_error:
@@ -405,7 +424,7 @@ def main(argv=None):
 
     if report_path is not None:
         try:
-            write_report(report_path, target, args.dry_run, actions)
+            write_report(report_path, target, args.dry_run, actions, **({"include_sizes": True} if args.include_sizes else {}))
         except OSError as exc:
             print(f"Error: could not write JSON report: {exc}", file=sys.stderr)
             return 1
