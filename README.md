@@ -91,3 +91,5 @@ Opt in to `--include-sizes --report-json audit.json` for per-file `size_bytes` a
 Use repeatable `--include-pattern "reports/*.csv"` to select relative POSIX paths with case-sensitive Python fnmatch matching. Patterns combine with existing exclusions; `*` can span `/`, so this is a path-string filter rather than shell glob traversal. No pattern includes all otherwise eligible files.
 
 Repeat `--exclude-pattern "reports/private*"` to skip relative POSIX paths using case-sensitive fnmatch. Exclusions take precedence over include patterns and combine with directory, extension, age and size exclusions. As with include patterns, `*` can span `/`.
+
+`--max-total-bytes N` preflights the complete selected batch after filters and report exclusion. An over-budget batch fails before moves or report replacement; it does not partially select files. This bounds observed logical file bytes, not physical filesystem allocation, and is not a reservation against concurrent source growth.

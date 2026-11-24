@@ -332,7 +332,10 @@ def main(argv=None):
     parser.add_argument("--include-sizes", action="store_true", help="Include observed file bytes and planned/moved byte totals in audit reports")
     parser.add_argument("--include-pattern", action="append", default=[], help="Include relative POSIX paths matching any case-sensitive fnmatch pattern (repeatable)")
     parser.add_argument("--exclude-pattern", action="append", default=[], help="Skip matching relative POSIX paths using case-sensitive fnmatch (repeatable)")
+    parser.add_argument("--max-total-bytes", type=int, help="Fail before moving files if the full selected batch exceeds this byte budget")
     args = parser.parse_args(argv)
+    if args.max_total_bytes is not None and args.max_total_bytes < 0:
+        parser.error("--max-total-bytes must be non-negative")
     if any(not pattern.strip() for pattern in args.exclude_pattern):
         parser.error("--exclude-pattern cannot be empty")
     if any(not pattern.strip() for pattern in args.include_pattern):
@@ -392,6 +395,15 @@ def main(argv=None):
             if not groups[category]:
                 del groups[category]
 
+    if args.max_total_bytes is not None:
+        try:
+            batch_bytes = sum(path.stat().st_size for paths in groups.values() for path in paths)
+        except OSError as exc:
+            print(f"Error: could not measure selected batch: {exc}", file=sys.stderr)
+            return 1
+        if batch_bytes > args.max_total_bytes:
+            print(f"Error: selected batch is {batch_bytes} bytes, exceeding budget {args.max_total_bytes}.", file=sys.stderr)
+            return 1
     if not groups:
         print("No files to organize.")
         if report_path is not None:
