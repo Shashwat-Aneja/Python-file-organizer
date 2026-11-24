@@ -89,3 +89,5 @@ Use repeatable `--category Documents --category Images` options to organize only
 Opt in to `--include-sizes --report-json audit.json` for per-file `size_bytes` and planned/moved byte totals. Dry runs observe current source sizes; successful moves report the source descriptor size validated during copying. Failed actions have no successful byte count. Default report fields are unchanged.
 
 Use repeatable `--include-pattern "reports/*.csv"` to select relative POSIX paths with case-sensitive Python fnmatch matching. Patterns combine with existing exclusions; `*` can span `/`, so this is a path-string filter rather than shell glob traversal. No pattern includes all otherwise eligible files.
+
+Repeat `--exclude-pattern "reports/private*"` to skip relative POSIX paths using case-sensitive fnmatch. Exclusions take precedence over include patterns and combine with directory, extension, age and size exclusions. As with include patterns, `*` can span `/`.

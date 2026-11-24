@@ -178,10 +178,13 @@ def scan_and_group(
     exclude_directories=None,
     min_age_seconds=None,
     include_patterns=None,
+    exclude_patterns=None,
 ):
     """Group files by category, optionally discovering files below the target."""
     if include_patterns is not None and (not isinstance(include_patterns, (list, tuple)) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in include_patterns)):
         raise ValueError("include_patterns must be a list of non-empty patterns.")
+    if exclude_patterns is not None and (not isinstance(exclude_patterns, (list, tuple)) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in exclude_patterns)):
+        raise ValueError("exclude_patterns must be a list of non-empty patterns.")
     excluded = {
         ("." + extension.strip().lstrip(".")).lower()
         for extension in (exclude_extensions or [])
@@ -212,6 +215,8 @@ def scan_and_group(
 
     for path in paths:
         relative = path.relative_to(target)
+        if exclude_patterns and any(fnmatchcase(relative.as_posix(), pattern) for pattern in exclude_patterns):
+            continue
         if include_patterns and not any(fnmatchcase(relative.as_posix(), pattern) for pattern in include_patterns):
             continue
         if any(part in excluded_directories for part in relative.parts[:-1]):
@@ -326,7 +331,10 @@ def main(argv=None):
     parser.add_argument("--older-than-days", type=float, help="Organize only files whose modification time is at least N days old")
     parser.add_argument("--include-sizes", action="store_true", help="Include observed file bytes and planned/moved byte totals in audit reports")
     parser.add_argument("--include-pattern", action="append", default=[], help="Include relative POSIX paths matching any case-sensitive fnmatch pattern (repeatable)")
+    parser.add_argument("--exclude-pattern", action="append", default=[], help="Skip matching relative POSIX paths using case-sensitive fnmatch (repeatable)")
     args = parser.parse_args(argv)
+    if any(not pattern.strip() for pattern in args.exclude_pattern):
+        parser.error("--exclude-pattern cannot be empty")
     if any(not pattern.strip() for pattern in args.include_pattern):
         parser.error("--include-pattern cannot be empty")
     min_age_seconds = args.older_than_days * 86400 if args.older_than_days is not None else None
@@ -367,6 +375,7 @@ def main(argv=None):
             max_size_bytes=args.max_size_bytes,
             exclude_directories=args.exclude_dir,
             **({"include_patterns": args.include_pattern} if args.include_pattern else {}),
+            **({"exclude_patterns": args.exclude_pattern} if args.exclude_pattern else {}),
             **({"min_age_seconds": min_age_seconds} if min_age_seconds is not None else {}),
         )
     except OSError as exc:
