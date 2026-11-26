@@ -58,7 +58,7 @@ def categorize(path: Path):
 
 def _move_no_replace(src, dest):
     """Copy to an exclusively created destination before removing the source."""
-    descriptor = os.open(src, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    descriptor = os.open(src, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
     created = False
     destination_identity = None
     try:
