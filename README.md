@@ -93,3 +93,9 @@ Use repeatable `--include-pattern "reports/*.csv"` to select relative POSIX path
 Repeat `--exclude-pattern "reports/private*"` to skip relative POSIX paths using case-sensitive fnmatch. Exclusions take precedence over include patterns and combine with directory, extension, age and size exclusions. As with include patterns, `*` can span `/`.
 
 `--max-total-bytes N` preflights the complete selected batch after filters and report exclusion. An over-budget batch fails before moves or report replacement; it does not partially select files. This bounds observed logical file bytes, not physical filesystem allocation, and is not a reservation against concurrent source growth.
+
+On systems with O_NONBLOCK, source opens are nonblocking before descriptor-based regular-file validation. A source replaced with a FIFO between discovery and opening is rejected instead of hanging the organizer; no FIFO data is read.
+
+`--recursive --max-depth N` prunes discovery beneath N directory levels (root depth 0). Root files remain eligible; depth 1 includes files in immediate child directories. Hidden, generated-category, symlink and explicit directory exclusions still apply.
+
+`--recursive --one-file-system` prunes directories on a different device from the target root. It uses observed st_dev metadata, follows no directory symlinks, and fails discovery on metadata errors rather than silently selecting a partial batch. No mounts are created or changed.

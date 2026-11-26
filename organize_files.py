@@ -58,7 +58,7 @@ def categorize(path: Path):
 
 def _move_no_replace(src, dest):
     """Copy to an exclusively created destination before removing the source."""
-    descriptor = os.open(src, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    descriptor = os.open(src, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
     created = False
     destination_identity = None
     try:
@@ -149,9 +149,14 @@ def safe_move(src: Path, dest_dir: Path, dry_run=False, reserved_destinations=No
     return action
 
 
-def discover_paths(target, recursive, include_hidden, excluded_directories):
+def same_filesystem(path, device):
+    return path.lstat().st_dev == device
+
+
+def discover_paths(target, recursive, include_hidden, excluded_directories, max_depth=None, one_file_system=False):
     if not recursive:
         return target.iterdir()
+    root_device = target.stat().st_dev if one_file_system else None
     generated_categories = {name.casefold() for name in set(CATEGORIES) | {"Others"}}
     def raise_walk_error(error):
         raise error
@@ -162,7 +167,10 @@ def discover_paths(target, recursive, include_hidden, excluded_directories):
                 if name not in excluded_directories
                 and (include_hidden or not name.startswith("."))
                 and not (current == target and name.casefold() in generated_categories)
-                and not (current / name).is_symlink()]
+                and not (current / name).is_symlink()
+                and (not one_file_system or same_filesystem(current / name, root_device))]
+            if max_depth is not None and len(current.relative_to(target).parts) >= max_depth:
+                directories[:] = []
             for name in files:
                 yield current / name
     return walk()
@@ -179,12 +187,18 @@ def scan_and_group(
     min_age_seconds=None,
     include_patterns=None,
     exclude_patterns=None,
+    max_depth=None,
+    one_file_system=False,
 ):
     """Group files by category, optionally discovering files below the target."""
     if include_patterns is not None and (not isinstance(include_patterns, (list, tuple)) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in include_patterns)):
         raise ValueError("include_patterns must be a list of non-empty patterns.")
     if exclude_patterns is not None and (not isinstance(exclude_patterns, (list, tuple)) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in exclude_patterns)):
         raise ValueError("exclude_patterns must be a list of non-empty patterns.")
+    if max_depth is not None and (not isinstance(max_depth, int) or isinstance(max_depth, bool) or max_depth < 0 or not recursive):
+        raise ValueError("max_depth requires recursive discovery and a non-negative integer.")
+    if not isinstance(one_file_system, bool) or (one_file_system and not recursive):
+        raise ValueError("one_file_system requires recursive discovery and a boolean.")
     excluded = {
         ("." + extension.strip().lstrip(".")).lower()
         for extension in (exclude_extensions or [])
@@ -205,7 +219,7 @@ def scan_and_group(
     excluded_directories = set(exclude_directories or [])
     groups = defaultdict(list)
     paths = sorted(
-        discover_paths(target, recursive, include_hidden, excluded_directories),
+        discover_paths(target, recursive, include_hidden, excluded_directories, **({"max_depth": max_depth} if max_depth is not None else {}), **({"one_file_system": True} if one_file_system else {})),
         key=lambda path: (
             path.relative_to(target).as_posix().casefold(),
             path.relative_to(target).as_posix(),
@@ -333,7 +347,13 @@ def main(argv=None):
     parser.add_argument("--include-pattern", action="append", default=[], help="Include relative POSIX paths matching any case-sensitive fnmatch pattern (repeatable)")
     parser.add_argument("--exclude-pattern", action="append", default=[], help="Skip matching relative POSIX paths using case-sensitive fnmatch (repeatable)")
     parser.add_argument("--max-total-bytes", type=int, help="Fail before moving files if the full selected batch exceeds this byte budget")
+    parser.add_argument("--max-depth", type=int, help="Maximum recursive directory depth; zero includes only root files")
+    parser.add_argument("--one-file-system", action="store_true", help="Prune recursive directories whose device differs from the target root")
     args = parser.parse_args(argv)
+    if args.one_file_system and not args.recursive:
+        parser.error("--one-file-system requires --recursive")
+    if args.max_depth is not None and (not args.recursive or args.max_depth < 0):
+        parser.error("--max-depth requires --recursive and a non-negative integer")
     if args.max_total_bytes is not None and args.max_total_bytes < 0:
         parser.error("--max-total-bytes must be non-negative")
     if any(not pattern.strip() for pattern in args.exclude_pattern):
@@ -377,6 +397,8 @@ def main(argv=None):
             min_size_bytes=args.min_size_bytes,
             max_size_bytes=args.max_size_bytes,
             exclude_directories=args.exclude_dir,
+            **({"one_file_system": True} if args.one_file_system else {}),
+            **({"max_depth": args.max_depth} if args.max_depth is not None else {}),
             **({"include_patterns": args.include_pattern} if args.include_pattern else {}),
             **({"exclude_patterns": args.exclude_pattern} if args.exclude_pattern else {}),
             **({"min_age_seconds": min_age_seconds} if min_age_seconds is not None else {}),
