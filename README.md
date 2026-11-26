@@ -97,3 +97,5 @@ Repeat `--exclude-pattern "reports/private*"` to skip relative POSIX paths using
 On systems with O_NONBLOCK, source opens are nonblocking before descriptor-based regular-file validation. A source replaced with a FIFO between discovery and opening is rejected instead of hanging the organizer; no FIFO data is read.
 
 `--recursive --max-depth N` prunes discovery beneath N directory levels (root depth 0). Root files remain eligible; depth 1 includes files in immediate child directories. Hidden, generated-category, symlink and explicit directory exclusions still apply.
+
+`--recursive --one-file-system` prunes directories on a different device from the target root. It uses observed st_dev metadata, follows no directory symlinks, and fails discovery on metadata errors rather than silently selecting a partial batch. No mounts are created or changed.
