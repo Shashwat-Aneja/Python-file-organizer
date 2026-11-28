@@ -191,6 +191,7 @@ def scan_and_group(
     max_depth=None,
     one_file_system=False,
     ignore_pattern_case=False,
+    max_age_seconds=None,
 ):
     """Group files by category, optionally discovering files below the target."""
     if not isinstance(ignore_pattern_case, bool):
@@ -222,7 +223,13 @@ def scan_and_group(
 
     if min_age_seconds is not None and (isinstance(min_age_seconds, bool) or not isinstance(min_age_seconds, Real) or not math.isfinite(min_age_seconds) or min_age_seconds < 0):
         raise ValueError("min_age_seconds must be a finite non-negative number.")
-    age_cutoff = time.time() - min_age_seconds if min_age_seconds is not None else None
+    if max_age_seconds is not None and (isinstance(max_age_seconds, bool) or not isinstance(max_age_seconds, Real) or not math.isfinite(max_age_seconds) or max_age_seconds < 0):
+        raise ValueError("max_age_seconds must be a finite non-negative number.")
+    if min_age_seconds is not None and max_age_seconds is not None and min_age_seconds > max_age_seconds:
+        raise ValueError("Minimum file age cannot exceed maximum file age.")
+    now = time.time()
+    age_cutoff = now - min_age_seconds if min_age_seconds is not None else None
+    oldest_cutoff = now - max_age_seconds if max_age_seconds is not None else None
     excluded_directories = set(exclude_directories or [])
     groups = defaultdict(list)
     paths = sorted(
@@ -259,6 +266,8 @@ def scan_and_group(
             continue
         metadata = path.stat()
         if age_cutoff is not None and metadata.st_mtime > age_cutoff:
+            continue
+        if oldest_cutoff is not None and metadata.st_mtime < oldest_cutoff:
             continue
         size_bytes = metadata.st_size
         if min_size_bytes is not None and size_bytes < min_size_bytes:
@@ -358,6 +367,7 @@ def main(argv=None):
     parser.add_argument("--max-depth", type=int, help="Maximum recursive directory depth; zero includes only root files")
     parser.add_argument("--one-file-system", action="store_true", help="Prune recursive directories whose device differs from the target root")
     parser.add_argument("--ignore-pattern-case", action="store_true", help="Match include/exclude relative path patterns case-insensitively")
+    parser.add_argument("--newer-than-days", type=float, help="Select files modified within this many days; combines with --older-than-days")
     args = parser.parse_args(argv)
     if args.one_file_system and not args.recursive:
         parser.error("--one-file-system requires --recursive")
@@ -372,6 +382,10 @@ def main(argv=None):
     min_age_seconds = args.older_than_days * 86400 if args.older_than_days is not None else None
     if min_age_seconds is not None and (not math.isfinite(min_age_seconds) or min_age_seconds < 0):
         parser.error("--older-than-days must be a finite non-negative duration")
+
+    max_age_seconds = args.newer_than_days * 86400 if args.newer_than_days is not None else None
+    if max_age_seconds is not None and (not math.isfinite(max_age_seconds) or max_age_seconds < 0 or (min_age_seconds is not None and min_age_seconds > max_age_seconds)):
+        parser.error("--newer-than-days must be finite, non-negative and at least --older-than-days")
 
     target = Path(args.target).resolve()
     if not target.exists() or not target.is_dir():
@@ -411,6 +425,7 @@ def main(argv=None):
             **({"ignore_pattern_case": True} if args.ignore_pattern_case else {}),
             **({"include_patterns": args.include_pattern} if args.include_pattern else {}),
             **({"exclude_patterns": args.exclude_pattern} if args.exclude_pattern else {}),
+            **({"max_age_seconds": max_age_seconds} if max_age_seconds is not None else {}),
             **({"min_age_seconds": min_age_seconds} if min_age_seconds is not None else {}),
         )
     except OSError as exc:

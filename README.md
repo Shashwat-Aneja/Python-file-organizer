@@ -101,3 +101,5 @@ On systems with O_NONBLOCK, source opens are nonblocking before descriptor-based
 `--recursive --one-file-system` prunes directories on a different device from the target root. It uses observed st_dev metadata, follows no directory symlinks, and fails discovery on metadata errors rather than silently selecting a partial batch. No mounts are created or changed.
 
 `--ignore-pattern-case` uses Unicode-aware case-insensitive matching for include/exclude relative POSIX path patterns, preserving glob character classes and single-character wildcards. Exclusions retain priority. Defaults remain case-sensitive on every platform; folder pruning and categorization rules are unchanged.
+
+`--newer-than-days N` selects files modified within an inclusive age window. Combine with `--older-than-days` to select a bounded interval using one captured clock time. Durations must be finite/non-negative and ordered; discovery previews are still rechecked by the existing safe move path.
