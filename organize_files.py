@@ -17,7 +17,8 @@ Features:
 """
 
 import argparse
-from fnmatch import fnmatchcase
+from fnmatch import translate
+import re
 import math
 import time
 from numbers import Real
@@ -189,8 +190,11 @@ def scan_and_group(
     exclude_patterns=None,
     max_depth=None,
     one_file_system=False,
+    ignore_pattern_case=False,
 ):
     """Group files by category, optionally discovering files below the target."""
+    if not isinstance(ignore_pattern_case, bool):
+        raise ValueError("ignore_pattern_case must be a boolean.")
     if include_patterns is not None and (not isinstance(include_patterns, (list, tuple)) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in include_patterns)):
         raise ValueError("include_patterns must be a list of non-empty patterns.")
     if exclude_patterns is not None and (not isinstance(exclude_patterns, (list, tuple)) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in exclude_patterns)):
@@ -199,6 +203,9 @@ def scan_and_group(
         raise ValueError("max_depth requires recursive discovery and a non-negative integer.")
     if not isinstance(one_file_system, bool) or (one_file_system and not recursive):
         raise ValueError("one_file_system requires recursive discovery and a boolean.")
+    flags = re.IGNORECASE if ignore_pattern_case else 0
+    include_globs = [re.compile(translate(pattern), flags) for pattern in include_patterns or []]
+    exclude_globs = [re.compile(translate(pattern), flags) for pattern in exclude_patterns or []]
     excluded = {
         ("." + extension.strip().lstrip(".")).lower()
         for extension in (exclude_extensions or [])
@@ -229,9 +236,10 @@ def scan_and_group(
 
     for path in paths:
         relative = path.relative_to(target)
-        if exclude_patterns and any(fnmatchcase(relative.as_posix(), pattern) for pattern in exclude_patterns):
+        match_path = relative.as_posix()
+        if any(pattern.fullmatch(match_path) for pattern in exclude_globs):
             continue
-        if include_patterns and not any(fnmatchcase(relative.as_posix(), pattern) for pattern in include_patterns):
+        if include_globs and not any(pattern.fullmatch(match_path) for pattern in include_globs):
             continue
         if any(part in excluded_directories for part in relative.parts[:-1]):
             continue
@@ -349,6 +357,7 @@ def main(argv=None):
     parser.add_argument("--max-total-bytes", type=int, help="Fail before moving files if the full selected batch exceeds this byte budget")
     parser.add_argument("--max-depth", type=int, help="Maximum recursive directory depth; zero includes only root files")
     parser.add_argument("--one-file-system", action="store_true", help="Prune recursive directories whose device differs from the target root")
+    parser.add_argument("--ignore-pattern-case", action="store_true", help="Match include/exclude relative path patterns case-insensitively")
     args = parser.parse_args(argv)
     if args.one_file_system and not args.recursive:
         parser.error("--one-file-system requires --recursive")
@@ -399,6 +408,7 @@ def main(argv=None):
             exclude_directories=args.exclude_dir,
             **({"one_file_system": True} if args.one_file_system else {}),
             **({"max_depth": args.max_depth} if args.max_depth is not None else {}),
+            **({"ignore_pattern_case": True} if args.ignore_pattern_case else {}),
             **({"include_patterns": args.include_pattern} if args.include_pattern else {}),
             **({"exclude_patterns": args.exclude_pattern} if args.exclude_pattern else {}),
             **({"min_age_seconds": min_age_seconds} if min_age_seconds is not None else {}),
