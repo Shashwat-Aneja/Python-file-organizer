@@ -17,7 +17,8 @@ Features:
 """
 
 import argparse
-from fnmatch import fnmatchcase
+from fnmatch import translate
+import re
 import math
 import time
 from numbers import Real
@@ -189,8 +190,12 @@ def scan_and_group(
     exclude_patterns=None,
     max_depth=None,
     one_file_system=False,
+    ignore_pattern_case=False,
+    max_age_seconds=None,
 ):
     """Group files by category, optionally discovering files below the target."""
+    if not isinstance(ignore_pattern_case, bool):
+        raise ValueError("ignore_pattern_case must be a boolean.")
     if include_patterns is not None and (not isinstance(include_patterns, (list, tuple)) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in include_patterns)):
         raise ValueError("include_patterns must be a list of non-empty patterns.")
     if exclude_patterns is not None and (not isinstance(exclude_patterns, (list, tuple)) or any(not isinstance(pattern, str) or not pattern.strip() for pattern in exclude_patterns)):
@@ -199,6 +204,9 @@ def scan_and_group(
         raise ValueError("max_depth requires recursive discovery and a non-negative integer.")
     if not isinstance(one_file_system, bool) or (one_file_system and not recursive):
         raise ValueError("one_file_system requires recursive discovery and a boolean.")
+    flags = re.IGNORECASE if ignore_pattern_case else 0
+    include_globs = [re.compile(translate(pattern), flags) for pattern in include_patterns or []]
+    exclude_globs = [re.compile(translate(pattern), flags) for pattern in exclude_patterns or []]
     excluded = {
         ("." + extension.strip().lstrip(".")).lower()
         for extension in (exclude_extensions or [])
@@ -215,7 +223,13 @@ def scan_and_group(
 
     if min_age_seconds is not None and (isinstance(min_age_seconds, bool) or not isinstance(min_age_seconds, Real) or not math.isfinite(min_age_seconds) or min_age_seconds < 0):
         raise ValueError("min_age_seconds must be a finite non-negative number.")
-    age_cutoff = time.time() - min_age_seconds if min_age_seconds is not None else None
+    if max_age_seconds is not None and (isinstance(max_age_seconds, bool) or not isinstance(max_age_seconds, Real) or not math.isfinite(max_age_seconds) or max_age_seconds < 0):
+        raise ValueError("max_age_seconds must be a finite non-negative number.")
+    if min_age_seconds is not None and max_age_seconds is not None and min_age_seconds > max_age_seconds:
+        raise ValueError("Minimum file age cannot exceed maximum file age.")
+    now = time.time()
+    age_cutoff = now - min_age_seconds if min_age_seconds is not None else None
+    oldest_cutoff = now - max_age_seconds if max_age_seconds is not None else None
     excluded_directories = set(exclude_directories or [])
     groups = defaultdict(list)
     paths = sorted(
@@ -229,9 +243,10 @@ def scan_and_group(
 
     for path in paths:
         relative = path.relative_to(target)
-        if exclude_patterns and any(fnmatchcase(relative.as_posix(), pattern) for pattern in exclude_patterns):
+        match_path = relative.as_posix()
+        if any(pattern.fullmatch(match_path) for pattern in exclude_globs):
             continue
-        if include_patterns and not any(fnmatchcase(relative.as_posix(), pattern) for pattern in include_patterns):
+        if include_globs and not any(pattern.fullmatch(match_path) for pattern in include_globs):
             continue
         if any(part in excluded_directories for part in relative.parts[:-1]):
             continue
@@ -251,6 +266,8 @@ def scan_and_group(
             continue
         metadata = path.stat()
         if age_cutoff is not None and metadata.st_mtime > age_cutoff:
+            continue
+        if oldest_cutoff is not None and metadata.st_mtime < oldest_cutoff:
             continue
         size_bytes = metadata.st_size
         if min_size_bytes is not None and size_bytes < min_size_bytes:
@@ -349,6 +366,8 @@ def main(argv=None):
     parser.add_argument("--max-total-bytes", type=int, help="Fail before moving files if the full selected batch exceeds this byte budget")
     parser.add_argument("--max-depth", type=int, help="Maximum recursive directory depth; zero includes only root files")
     parser.add_argument("--one-file-system", action="store_true", help="Prune recursive directories whose device differs from the target root")
+    parser.add_argument("--ignore-pattern-case", action="store_true", help="Match include/exclude relative path patterns case-insensitively")
+    parser.add_argument("--newer-than-days", type=float, help="Select files modified within this many days; combines with --older-than-days")
     args = parser.parse_args(argv)
     if args.one_file_system and not args.recursive:
         parser.error("--one-file-system requires --recursive")
@@ -363,6 +382,10 @@ def main(argv=None):
     min_age_seconds = args.older_than_days * 86400 if args.older_than_days is not None else None
     if min_age_seconds is not None and (not math.isfinite(min_age_seconds) or min_age_seconds < 0):
         parser.error("--older-than-days must be a finite non-negative duration")
+
+    max_age_seconds = args.newer_than_days * 86400 if args.newer_than_days is not None else None
+    if max_age_seconds is not None and (not math.isfinite(max_age_seconds) or max_age_seconds < 0 or (min_age_seconds is not None and min_age_seconds > max_age_seconds)):
+        parser.error("--newer-than-days must be finite, non-negative and at least --older-than-days")
 
     target = Path(args.target).resolve()
     if not target.exists() or not target.is_dir():
@@ -399,8 +422,10 @@ def main(argv=None):
             exclude_directories=args.exclude_dir,
             **({"one_file_system": True} if args.one_file_system else {}),
             **({"max_depth": args.max_depth} if args.max_depth is not None else {}),
+            **({"ignore_pattern_case": True} if args.ignore_pattern_case else {}),
             **({"include_patterns": args.include_pattern} if args.include_pattern else {}),
             **({"exclude_patterns": args.exclude_pattern} if args.exclude_pattern else {}),
+            **({"max_age_seconds": max_age_seconds} if max_age_seconds is not None else {}),
             **({"min_age_seconds": min_age_seconds} if min_age_seconds is not None else {}),
         )
     except OSError as exc:
